@@ -1,0 +1,7 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { Utensils, Plus, UserRound, Search } from 'lucide-react';
+import { currentUserId } from '@/server/auth';
+import './globals.css';
+export const metadata:Metadata={title:{default:'俺は誰かと飯が食いたい！',template:'%s | 俺は誰かと飯が食いたい！'},description:'今日、誰かと飯食わない？ 食べたい気持ちでつながる、気軽なごはんの募集サービス。'};
+export default async function RootLayout({children}:{children:React.ReactNode}){const userId=await currentUserId();return <html lang="ja"><body><a href="#main" className="skip-link">本文へ</a><header className="site-header"><Link className="brand" href="/"><span className="brand-icon"><Utensils size={21}/></span><span>俺は誰かと<br/>飯が食いたい<span className="orange">！</span></span></Link><nav><Link href="/meals" className="desktop-link">飯を探す</Link><Link href={userId?'/mypage':'/login'} className="nav-user"><UserRound size={18}/><span>{userId?'マイページ':'ログイン'}</span></Link><Link className="btn small" href="/meals/new"><Plus size={17}/>飯を募集する</Link></nav></header><main id="main">{children}</main><footer className="site-footer"><Link className="brand" href="/">俺は誰かと飯が食いたい！</Link><p>うまい飯は、誰かと食うともっとうまい。</p><small>© {new Date().getFullYear()} 俺は誰かと飯が食いたい！</small></footer><nav className="mobile-nav"><Link href="/meals"><Search size={20}/>飯を探す</Link><Link href="/meals/new"><Plus size={20}/>飯を募集する</Link><Link href="/mypage"><UserRound size={20}/>マイページ</Link></nav></body></html>;}

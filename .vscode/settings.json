@@ -1,0 +1,9 @@
+{
+  "chat.tools.terminal.autoApprove": {
+    "/^npx prisma validate$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  },
+  "prisma.pinToPrisma6": true
+}

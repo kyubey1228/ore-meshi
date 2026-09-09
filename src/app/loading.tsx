@@ -1,0 +1,1 @@
+export default function Loading() { return <div className="section narrow" aria-label="読み込み中"><div className="skeleton hero-skeleton" /><div className="skeleton panel-skeleton" /><div className="skeleton panel-skeleton" /></div>; }

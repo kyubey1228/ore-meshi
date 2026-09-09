@@ -1,0 +1,15 @@
+'use server';
+import { z } from 'zod';
+import { idSchema } from '@/validators';
+import { perform, transaction, ensure, participantMatch } from '@/server/action';
+export async function setMatchStatus(input: unknown) {return perform(async userId=>{
+  const {id,status}=z.object({id:idSchema,status:z.enum(['COMPLETED','CANCELLED'])}).parse(input);
+  await transaction(async tx=>{
+    const match=await participantMatch(tx,id,userId);ensure(match.status==='ACTIVE','この飯の予定はすでに終了しています。');
+    if(status==='COMPLETED') ensure(match.scheduledAt<=new Date(),'飯終了は予定日時を過ぎてから押してください。');
+    await tx.match.update({where:{id},data:{status}});
+    await tx.rescheduleProposal.updateMany({where:{matchId:id,status:'PENDING'},data:{status:'CANCELLED'}});
+    if(match.meal.status!=='CANCELLED') await tx.meal.update({where:{id:match.mealId},data:{status:'CLOSED'}});
+    await tx.joinRequest.updateMany({where:{mealId:match.mealId,status:'PENDING'},data:{status:'REJECTED'}});
+  });
+});}

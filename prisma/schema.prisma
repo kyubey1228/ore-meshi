@@ -1,0 +1,258 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum PaymentType {
+  SPLIT
+  HOST_PAYS
+  GUEST_PAYS
+}
+
+enum MealStatus {
+  OPEN
+  MATCHED
+  CLOSED
+  CANCELLED
+}
+
+enum JoinRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum MatchStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum RescheduleProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum WouldMeetAgain {
+  YES
+  NEUTRAL
+  NO
+}
+
+enum AttendanceStatus {
+  ATTENDED
+  LATE_CANCEL
+  NO_SHOW
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String?   @unique
+  emailVerified   DateTime?
+  twitterId       String    @unique
+  twitterUsername String
+  displayName     String
+  image           String?
+  bio             String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  accounts             Account[]
+  sessions             Session[]
+  hostedMeals          Meal[]                  @relation("MealHost")
+  joinRequests         JoinRequest[]
+  rescheduleVotes      RescheduleVote[]
+  matchParticipants    MatchParticipant[]
+  rescheduleProposals  RescheduleProposal[]    @relation("RescheduleProposer")
+  diningFeedbackSent   DiningFeedback[]        @relation("DiningFeedbackFrom")
+  diningFeedbackReceived DiningFeedback[]        @relation("DiningFeedbackTo")
+
+  @@index([twitterUsername])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Meal {
+  id             String      @id @default(cuid())
+  hostId         String
+  title          String
+  description    String?
+  area           String
+  restaurant     String?
+  genre          String?
+  alcohol        String?
+  smoking        String?
+  ageCondition   String?
+  deadline       DateTime?
+  budgetMin      Int
+  budgetMax      Int
+  paymentType    PaymentType
+  maxParticipants Int
+  status         MealStatus  @default(OPEN)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  host        User          @relation("MealHost", fields: [hostId], references: [id], onDelete: Cascade)
+  candidates  MealCandidate[]
+  joinRequests JoinRequest[]
+  matches     Match[]
+
+  @@index([hostId, createdAt])
+  @@index([status, area, createdAt])
+}
+
+model MealCandidate {
+  id        String   @id @default(cuid())
+  mealId    String
+  date      DateTime
+  startTime String
+  endTime   String
+  createdAt DateTime @default(now())
+
+  meal        Meal          @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  joinRequests JoinRequest[]
+  matches     Match[]
+
+  @@index([mealId])
+}
+
+model JoinRequest {
+  id          String            @id @default(cuid())
+  mealId      String
+  userId      String
+  candidateId String
+  message     String?
+  status      JoinRequestStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  meal     Meal         @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidate MealCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@unique([mealId, userId], map: "join_request_unique_per_user_per_meal")
+  @@index([mealId, status])
+  @@index([userId, status])
+}
+
+model Match {
+  id          String      @id @default(cuid())
+  mealId      String      @unique
+  candidateId String
+  scheduledAt DateTime
+  status      MatchStatus @default(ACTIVE)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  meal                Meal                 @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  candidate           MealCandidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  participants        MatchParticipant[]
+  rescheduleProposals RescheduleProposal[]
+  diningFeedbacks     DiningFeedback[]
+
+  @@index([mealId, status])
+  @@index([candidateId])
+}
+
+model MatchParticipant {
+  matchId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, userId])
+  @@index([userId])
+}
+
+model RescheduleProposal {
+  id         String                    @id @default(cuid())
+  matchId    String
+  proposerId String
+  proposedAt DateTime
+  status     RescheduleProposalStatus @default(PENDING)
+  createdAt  DateTime                  @default(now())
+  updatedAt  DateTime                  @updatedAt
+
+  votes    RescheduleVote[]
+  match    Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  proposer User  @relation("RescheduleProposer", fields: [proposerId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, status])
+  @@index([proposerId, status])
+}
+
+model DiningFeedback {
+  id             String          @id @default(cuid())
+  matchId        String
+  fromUserId     String
+  toUserId       String
+  wouldMeetAgain WouldMeetAgain
+  attendanceStatus AttendanceStatus @default(ATTENDED)
+  note           String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  from  User  @relation("DiningFeedbackFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to    User  @relation("DiningFeedbackTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, fromUserId, toUserId], map: "dining_feedback_unique_per_match_user_pair")
+  @@index([matchId])
+  @@index([fromUserId])
+  @@index([toUserId])
+}
+
+model RescheduleVote {
+  proposalId String
+  userId String
+  createdAt DateTime @default(now())
+  proposal RescheduleProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([proposalId, userId])
+  @@index([userId])
+}
