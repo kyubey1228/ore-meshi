@@ -6,7 +6,9 @@ export const dynamic = 'force-dynamic';
 
 function prismaErrorCode(error: unknown) {
   if (error instanceof Prisma.PrismaClientKnownRequestError) return error.code;
-  if (error instanceof Prisma.PrismaClientInitializationError) return 'INITIALIZATION_ERROR';
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    return error.errorCode ?? 'INITIALIZATION_ERROR';
+  }
   return 'UNKNOWN_ERROR';
 }
 
