@@ -35,6 +35,24 @@ function databaseTarget() {
   }
 }
 
+function safeErrorDetail(error: unknown) {
+  if (!(error instanceof Error)) return undefined;
+  let detail = error.message;
+  const value = process.env.DATABASE_URL;
+  if (value) {
+    detail = detail.replaceAll(value, '[DATABASE_URL]');
+    try {
+      const url = new URL(value);
+      for (const secret of [url.username, url.password, decodeURIComponent(url.password)]) {
+        if (secret.length >= 3) detail = detail.replaceAll(secret, '[REDACTED]');
+      }
+    } catch {
+      // The complete raw value was already redacted above.
+    }
+  }
+  return detail.replace(/postgres(?:ql)?:\/\/[^\s`]+/gi, '[DATABASE_URL]').slice(0, 800);
+}
+
 export async function GET() {
   const environment = {
     databaseUrl: Boolean(process.env.DATABASE_URL),
@@ -48,7 +66,7 @@ export async function GET() {
     await prisma.$queryRaw`SELECT 1`;
   } catch (error) {
     return NextResponse.json(
-      { status: 'unhealthy', environment, target: databaseTarget(), database: 'unreachable', code: prismaErrorCode(error) },
+      { status: 'unhealthy', environment, target: databaseTarget(), database: 'unreachable', code: prismaErrorCode(error), detail: safeErrorDetail(error) },
       { status: 503 },
     );
   }
@@ -58,7 +76,7 @@ export async function GET() {
     await prisma.meal.count();
   } catch (error) {
     return NextResponse.json(
-      { status: 'unhealthy', environment, target: databaseTarget(), database: 'schema-unavailable', code: prismaErrorCode(error) },
+      { status: 'unhealthy', environment, target: databaseTarget(), database: 'schema-unavailable', code: prismaErrorCode(error), detail: safeErrorDetail(error) },
       { status: 503 },
     );
   }
