@@ -47,7 +47,7 @@ NEXTAUTH_URL=http://localhost:3000
 3. Transaction poolerの接続文字列を `DATABASE_URL` に設定します。Prisma向けに `?pgbouncer=true&connection_limit=1` を付けます。
 4. Direct connection（環境からIPv6へ接続できない場合はSession pooler）の接続文字列を `DIRECT_URL` に設定します。
 5. `npm run db:migrate` で開発用migrationを作成・適用します。本番は `npm run db:deploy` を使います。
-6. `npm run db:seed` でユーザー6人、募集中の飯10件、参加希望、ACTIVE Match、COMPLETED Match、リスケ、全種類のフィードバックを投入できます。Seedはデモデータを再作成するため、本番DBでは実行しないでください。
+6. `npm run db:seed` でユーザー6人、受付停止済みのサンプル飯10件、参加希望、ACTIVE Match、COMPLETED Match、リスケ、全種類のフィードバックを投入できます。サンプル飯は誤応募を防ぐため公開募集一覧には表示されません。Seedはデモデータを再作成するため、本番DBでは実行しないでください。
 
 DBパスワードに `@`、`?`、`#`、`$` などが含まれる場合は、接続URL内のパスワード部分をパーセントエンコードしてください。たとえば `p@ss?word` は `p%40ss%3Fword` です。Supabase Dashboardが表示する接続文字列の `[YOUR-PASSWORD]` 部分へ、エンコード後の値を入れます。値全体をエンコードしてはいけません。
 
