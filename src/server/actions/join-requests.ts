@@ -23,11 +23,11 @@ export async function cancelJoinRequest(input: unknown) {return perform(async us
 });}
 export async function decideJoinRequest(input: unknown) {return perform(async userId=>{
   const {id,mealId,accept}=z.object({id:idSchema,mealId:idSchema,accept:z.boolean()}).parse(input);
-  await transaction(async tx=>{
+  return transaction(async tx=>{
     const meal=await tx.meal.findUnique({where:{id:mealId},include:{matches:{include:{participants:true}}}});ensure(meal?.hostId===userId);
     const request=await tx.joinRequest.findUnique({where:{id},include:{candidate:true}});
     ensure(request && request.mealId===mealId);ensure(request.status==='PENDING','この参加希望はすでに処理されています。');
-    if(!accept){await tx.joinRequest.update({where:{id},data:{status:'REJECTED'}});return;}
+    if(!accept){await tx.joinRequest.update({where:{id},data:{status:'REJECTED'}});return {};}
     ensure(meal.status==='OPEN','その飯はもう募集が終わっています。');ensure(!meal.deadline || meal.deadline>new Date(),'募集の締切を過ぎています。');
     ensure(request.userId!==userId && request.candidate.mealId===meal.id);
     let match=meal.matches[0];
@@ -37,8 +37,11 @@ export async function decideJoinRequest(input: unknown) {return perform(async us
     else {match=await tx.match.create({data:{mealId,candidateId:request.candidateId,scheduledAt:start,participants:{create:{userId}}},include:{participants:true}});}
     await tx.matchParticipant.create({data:{matchId:match.id,userId:request.userId}});
     await tx.joinRequest.update({where:{id},data:{status:'ACCEPTED'}});
-    const full=match.participants.length+1>=meal.maxParticipants;
+    const participantCount=await tx.matchParticipant.count({where:{matchId:match.id}});
+    ensure(participantCount<=meal.maxParticipants,'その枠は埋まりました。');
+    const full=participantCount===meal.maxParticipants;
     if(full) await tx.meal.update({where:{id:mealId},data:{status:'MATCHED'}});
     await tx.joinRequest.updateMany({where:{mealId,status:'PENDING',...(full?{}:{candidateId:{not:request.candidateId}})},data:{status:'REJECTED'}});
+    return {href:`/matches/${match.id}`,justMatched:full,matchId:match.id,meal:{title:meal.title,area:meal.area,scheduledAt:start.toISOString(),participantCount}};
   });
 });}

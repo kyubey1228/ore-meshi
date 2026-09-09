@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { currentUserId } from '@/server/auth';
-export type ActionResult = { ok: boolean; message: string; href?: string };
+export type ActionResult = { ok: boolean; message: string; href?: string; justMatched?: boolean; matchId?: string; meal?: {title:string;area:string;scheduledAt:string;participantCount:number} };
 export class UserError extends Error {}
 export function ensure(condition: unknown, message = 'この操作を行う権限がありません。'): asserts condition { if (!condition) throw new UserError(message); }
 export async function transaction<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
@@ -13,12 +13,13 @@ export async function transaction<T>(fn: (tx: Prisma.TransactionClient) => Promi
     catch(error) { if(error instanceof Prisma.PrismaClientKnownRequestError && error.code==='P2034' && attempt<3) continue; throw error; }
   }
 }
-export async function perform(fn: (userId: string) => Promise<string | void>): Promise<ActionResult> {
+type ActionSuccess = Omit<ActionResult, 'ok' | 'message'>;
+export async function perform(fn: (userId: string) => Promise<string | void | ActionSuccess>): Promise<ActionResult> {
   try {
     const id = await currentUserId(); ensure(id, 'Twitter/Xでログインしてください。');
-    const href = await fn(id);
+    const value = await fn(id);
     revalidatePath('/', 'layout');
-    return {ok:true,message:'保存しました。',...(href ? {href}: {})};
+    return {ok:true,message:'保存しました。',...(typeof value==='string'?{href:value}:value??{})};
   } catch(error) {
     if(error instanceof UserError) return {ok:false,message:error.message};
     if(error instanceof z.ZodError) return {ok:false,message:`入力を確認してください。${error.issues[0]?.message ?? ''}`};
