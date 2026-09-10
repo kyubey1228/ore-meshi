@@ -137,11 +137,17 @@ export async function getFrequentPostingPattern(userId: string){
   return {label:`${WEEKDAY_LABEL_JA[Number(dowStr)]}曜${hourStr}時頃`,weekday:Number(dowStr),hour:Number(hourStr)};
 }
 export async function getReferralStats(userId: string){
-  const [invitedCount,activatedCount]=await Promise.all([
+  const [invitedCount,signupCount,activatedCount,referredUsers]=await Promise.all([
+    prisma.referral.count({where:{referrerUserId:userId}}),
     prisma.referral.count({where:{referrerUserId:userId,referredUserId:{not:null}}}),
     prisma.referral.count({where:{referrerUserId:userId,activatedAt:{not:null}}}),
+    prisma.referral.findMany({where:{referrerUserId:userId,referredUserId:{not:null}},select:{referredUserId:true},distinct:['referredUserId']}),
   ]);
-  return {invitedCount,activatedCount};
+  const referredUserIds=referredUsers.map(r=>r.referredUserId).filter((id):id is string=>Boolean(id));
+  // 「紹介経由成立人数」はactivatedCount(=初回参加/成立まで到達した被紹介者の人数)とは別に、
+  // 被紹介者が実際に成立させたMatch件数(延べ)を見る指標として分けて出す。
+  const referredMatchCount=referredUserIds.length?await prisma.match.count({where:{participants:{some:{userId:{in:referredUserIds}}}}}):0;
+  return {invitedCount,signupCount,activatedCount,referredMatchCount};
 }
 export async function getHostTrustStats(hostId: string){
   if(!process.env.DATABASE_URL) return {hostedCount:0,completedCount:0};

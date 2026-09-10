@@ -26,6 +26,8 @@ export default async function MyPage() {
   const upcoming = data.matches.filter(m => m.status === 'ACTIVE');
   const lastHostedMeal = data.hostedMeals[0] ?? null;
   const favoriteMeals = favoriteIds.length ? await getMealsByIds(favoriteIds) : [];
+  // まだ人数が集まっていない(＝成立していない)自分の募集があるかどうか。招待CTAの文脈判定に使う。
+  const hasUnfilledMeal = data.hostedMeals.some(meal => meal.status === 'OPEN');
 
   return <section className="section"><div className="section-heading"><div><span className="eyebrow orange">MY TABLE</span><h1>マイページ</h1></div><div className="row">{data.businessMembership&&<Link className="text-link" href="/business/dashboard">{data.businessMembership.businessAccount.name}の店舗管理</Link>}{data.isAdmin&&<Link className="btn secondary small" href="/admin/leads">管理者ダッシュボード</Link>}<Link className="text-link" href="/profile">プロフィール編集</Link><LogoutButton /></div></div>
     <div className="dashboard-grid">
@@ -46,7 +48,18 @@ export default async function MyPage() {
       <div className="section-heading"><h2>あとで見る</h2></div>
       <div className="meal-grid">{favoriteMeals.map(meal => <MealCard key={meal.id} meal={meal} />)}</div>
     </>}
-    {referralStats.activatedCount > 0 && <p className="tag-pill orange-pill">🎉 招待実績: {referralStats.activatedCount}人が実際に飯に参加</p>}
+    {referralStats.invitedCount > 0 && (
+      <div className="panel">
+        <h2>招待実績</h2>
+        <dl className="stats">
+          <div><dt>招待</dt><dd>{referralStats.invitedCount}人</dd></div>
+          <div><dt>登録</dt><dd>{referralStats.signupCount}人</dd></div>
+          <div><dt>Activated</dt><dd>{referralStats.activatedCount}人</dd></div>
+          <div><dt>紹介経由の成立</dt><dd>{referralStats.referredMatchCount}件</dd></div>
+        </dl>
+      </div>
+    )}
+    {hasUnfilledMeal && <p className="notice">まだ人数が集まっていない募集があります。友達を誘うと成立しやすくなります。</p>}
     <ReferralShare inviteUrl={`${appUrl()}/invite/${referralCode}`} text={`「俺は誰かと飯が食いたい！」使ってみない？\n\n${appUrl()}/invite/${referralCode}`} />
   </section>;
 }

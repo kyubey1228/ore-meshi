@@ -36,3 +36,14 @@ export function matchedShareText(meal:Pick<ShareMeal,'id'|'title'|'area'|'candid
 }
 
 export function xIntent(text:string){return `https://x.com/intent/tweet?${new URLSearchParams({text}).toString()}`;}
+
+// 共有チャンネルごとにutm_source/mediumを付けたURLを発行する。着地先ページは既にGrowthTrackerを
+// mountしておりUTMをCookie化して以降のsignup計測まで引き継ぐため、新しいAttribution基盤を作らず
+// ここでURLを作るだけで既存の計測に乗る(meal-share-actions.tsx等から利用)。
+export function withUtm(url:string,source:string,medium:string,campaign='meal_share'){
+  const u=new URL(url);
+  u.searchParams.set('utm_source',source);
+  u.searchParams.set('utm_medium',medium);
+  u.searchParams.set('utm_campaign',campaign);
+  return u.toString();
+}

@@ -12,11 +12,13 @@ import { mealSchema } from '@/validators';
 import { paymentLabels, candidateLabel } from '@/lib/format';
 import { MealDraftPreview } from '@/components/meal-draft-preview';
 import { AreaDatalist } from '@/components/area-datalist';
+import { MealShareActions } from '@/components/meal-share-actions';
+import { mealUrl } from '@/lib/social';
 import type { z } from 'zod';
 
 type Fields={title:string;area:string;budgetMin:number;budgetMax:number;maxParticipants:number;paymentType:'SPLIT'|'HOST_PAYS'|'GUEST_PAYS';restaurant:string;description:string;genre:string;alcohol:string;smoking:string;ageCondition:string;deadline:string;purposeIds:string[]};
 type Candidate=z.infer<typeof mealSchema>['candidates'][number];
-type CreatedMeal={href:string;title:string;area:string;when:string;budget:string;payment:string;remaining:number;purposeLabels:string[]};
+type CreatedMeal={href:string;mealId:string;title:string;area:string;genre:string;when:string;budget:string;payment:string;remaining:number;purposeLabels:string[]};
 const presets=[{name:'朝',start:'06:00',end:'10:00'},{name:'昼',start:'11:00',end:'14:00'},{name:'夕方',start:'15:00',end:'18:00'},{name:'夜',start:'18:00',end:'22:00'},{name:'深夜',start:'22:00',end:'02:00'}];
 
 export function MealForm({initial,id,purposes,areaOptions=[]}:{initial?:Fields & {candidates:Candidate[]};id?:string;purposes:SelectableTag[];areaOptions?:string[]}){
@@ -40,15 +42,8 @@ export function MealForm({initial,id,purposes,areaOptions=[]}:{initial?:Fields &
     setCandidates([...candidates,item]);setError('');
   }
 
-  function finishCreation(shareOnX:boolean){
+  function goToMeal(){
     if(!createdMeal)return;
-    if(shareOnX){
-      const url=new URL(createdMeal.href,window.location.origin).toString();
-      const params=new URLSearchParams({
-        text:['誰か飯いこ','',createdMeal.when,`${createdMeal.area}で${createdMeal.title}`,'',`${createdMeal.budget} / ${createdMeal.payment} / あと${createdMeal.remaining}人`,createdMeal.purposeLabels.map(label=>`#${label.replace(/\s/g,'')}`).join(' '),'','#誰か飯いこ',url].filter((line,index,all)=>line!==''||all[index-1]!=='').join('\n'),
-      });
-      window.open(`https://x.com/intent/tweet?${params.toString()}`,'_blank','noopener,noreferrer');
-    }
     router.push(createdMeal.href);router.refresh();
   }
 
@@ -61,7 +56,7 @@ export function MealForm({initial,id,purposes,areaOptions=[]}:{initial?:Fields &
           const result=id?await updateMeal({id,meal:parsed.data}):await createMeal(parsed.data);
           if(!result.ok||!result.href){setError(result.message);return;}
           if(id){router.push(result.href);router.refresh();return;}
-          setCreatedMeal({href:result.href,title:parsed.data.title,area:parsed.data.area,when:candidateLabel(parsed.data.candidates[0]),budget:`${parsed.data.budgetMin.toLocaleString()}円〜${parsed.data.budgetMax.toLocaleString()}円`,payment:paymentLabels[parsed.data.paymentType],remaining:parsed.data.maxParticipants-1,purposeLabels:purposes.filter(purpose=>parsed.data.purposeIds.includes(purpose.id)).map(purpose=>purpose.label)});
+          setCreatedMeal({href:result.href,mealId:result.href.split('/').filter(Boolean).pop()!,title:parsed.data.title,area:parsed.data.area,genre:parsed.data.genre,when:candidateLabel(parsed.data.candidates[0]),budget:`${parsed.data.budgetMin.toLocaleString()}円〜${parsed.data.budgetMax.toLocaleString()}円`,payment:paymentLabels[parsed.data.paymentType],remaining:parsed.data.maxParticipants-1,purposeLabels:purposes.filter(purpose=>parsed.data.purposeIds.includes(purpose.id)).map(purpose=>purpose.label)});
         }catch{setError('送信できませんでした。もう一度お試しください。');}
       });
     })}>
@@ -111,15 +106,23 @@ export function MealForm({initial,id,purposes,areaOptions=[]}:{initial?:Fields &
         <button className="btn wide" disabled={pending}>{pending?'保存中…':id?'募集を更新する':'この飯、一緒に行く人！'}</button>
       </fieldset>
     </form>
-    <Dialog open={Boolean(createdMeal)} onOpenChange={open=>{if(!open)finishCreation(false);}}>
+    <Dialog open={Boolean(createdMeal)} onOpenChange={open=>{if(!open)goToMeal();}}>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>募集をXに投稿しますか？</DialogTitle>
-          <DialogDescription>募集を作成しました。「はい」を選ぶと、募集内容を確認できるXの投稿画面が開きます。</DialogDescription>
+          <DialogTitle>募集を作成しました！</DialogTitle>
+          <DialogDescription>シェアすると、一緒に行ける人が見つかりやすくなります。</DialogDescription>
         </DialogHeader>
+        {createdMeal && (
+          <MealShareActions
+            mealId={createdMeal.mealId}
+            area={createdMeal.area}
+            genre={createdMeal.genre||null}
+            url={mealUrl(createdMeal.mealId)}
+            text={['誰か飯いこ','',createdMeal.when,`${createdMeal.area}で${createdMeal.title}`,'',`${createdMeal.budget} / ${createdMeal.payment} / あと${createdMeal.remaining}人`,createdMeal.purposeLabels.map(label=>`#${label.replace(/\s/g,'')}`).join(' '),'','#誰か飯いこ',mealUrl(createdMeal.mealId)].filter((line,index,all)=>line!==''||all[index-1]!=='').join('\n')}
+          />
+        )}
         <DialogFooter>
-          <button type="button" className="btn secondary" onClick={()=>finishCreation(false)}>いいえ</button>
-          <button type="button" className="btn" onClick={()=>finishCreation(true)}>はい、Xで投稿する</button>
+          <button type="button" className="btn secondary" onClick={goToMeal}>あとで・募集ページへ</button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
