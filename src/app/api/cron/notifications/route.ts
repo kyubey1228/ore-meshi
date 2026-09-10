@@ -36,12 +36,17 @@ export async function GET(request: Request) {
     const matchCursor = url.searchParams.get('matchCursor');
     const completionCursor = url.searchParams.get('completionCursor');
     const staleCursor = url.searchParams.get('staleCursor');
+    const winBackCursor = url.searchParams.get('winBackCursor');
     const now = new Date();
     const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const in2h = new Date(now.getTime() + 2 * 60 * 60 * 1000);
     const in2hAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const [deadlineSoon, todayMatches, soonMatches, awaitingCompletion, expired, staleCandidates] = await Promise.all([
+    // 登録から3〜10日経っても一度も募集・参加していないユーザーへの一度きりのきっかけ通知。
+    // 10日を超えたユーザーは対象から外れる(いつまでも古いユーザーを再処理し続けないための窓)。
+    const winBackWindowStart = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
+    const winBackWindowEnd = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+    const [deadlineSoon, todayMatches, soonMatches, awaitingCompletion, expired, staleCandidates, winBackCandidates] = await Promise.all([
       prisma.meal.findMany({ where: { ...cursorWhere(mealCursor), status: 'OPEN', deadline: { gt: now, lte: in24h } }, select: { id: true, title: true, hostId: true }, orderBy: { id: 'asc' }, take: limit }),
       prisma.match.findMany({ where: { ...cursorWhere(matchCursor), status: 'ACTIVE', scheduledAt: { gte: now, lte: jstEndOfTodayUTC(now) } }, select: { id: true, mealId: true, meal: { select: { title: true } }, participants: { select: { userId: true } } }, orderBy: { id: 'asc' }, take: limit }),
       prisma.match.findMany({ where: { ...cursorWhere(matchCursor), status: 'ACTIVE', scheduledAt: { gt: now, lte: in2h } }, select: { id: true, mealId: true, meal: { select: { title: true } }, participants: { select: { userId: true } } }, orderBy: { id: 'asc' }, take: limit }),
@@ -50,6 +55,7 @@ export async function GET(request: Request) {
       // 「全候補日が今日以前」のOPEN Mealだけをまず日単位でDBで絞り込み、
       // 開始時刻を使った正確な判定はJS側で行う(候補ごとのstartTimeを跨いだ比較はDBクエリだけでは表現できないため)。
       prisma.meal.findMany({ where: { ...cursorWhere(staleCursor), status: 'OPEN', candidates: { every: { date: { lte: jstEndOfTodayUTC(now) } }, some: {} } }, select: { id: true, title: true, hostId: true, candidates: { select: { date: true, startTime: true } } }, orderBy: { id: 'asc' }, take: limit }),
+      prisma.user.findMany({ where: { ...cursorWhere(winBackCursor), createdAt: { gte: winBackWindowStart, lte: winBackWindowEnd }, hostedMeals: { none: {} }, joinRequests: { none: {} } }, select: { id: true }, orderBy: { id: 'asc' }, take: limit }),
     ]);
     const toClose = staleCandidates.filter(meal => shouldAutoCloseMeal(meal.candidates, now));
     if (toClose.length) {
@@ -71,7 +77,8 @@ export async function GET(request: Request) {
       return results;
     });
     sent += await chunks(toClose, async meal => Number(Boolean(await createNotification({ userId: meal.hostId, type: 'MEAL_AUTO_CLOSED', title: '募集を自動的に終了しました', body: `「${meal.title}」は候補日時をすべて過ぎたため、募集を終了しました。`, mealId: meal.id, dedupeKey: `MEAL_AUTO_CLOSED:${meal.id}` }))));
+    sent += await chunks(winBackCandidates, async user => Number(Boolean(await createNotification({ userId: user.id, type: 'WIN_BACK_FIRST_ACTION', title: 'まだ誰とも飯を食べてない？', body: '気になる募集に「参加する」を押すだけでOK。今日、誰かと飯を食べてみませんか？', dedupeKey: `WIN_BACK_FIRST_ACTION:${user.id}` }))));
 
-    return NextResponse.json({ ok: true, notificationsSent: sent, demandIntentsExpired: expired.count, mealsAutoClosed: toClose.length, limit, hasMore: deadlineSoon.length === limit || todayMatches.length === limit || soonMatches.length === limit || awaitingCompletion.length === limit || staleCandidates.length === limit, nextCursor: { mealCursor: deadlineSoon.at(-1)?.id ?? null, matchCursor: todayMatches.at(-1)?.id ?? soonMatches.at(-1)?.id ?? null, completionCursor: awaitingCompletion.at(-1)?.id ?? null, staleCursor: staleCandidates.at(-1)?.id ?? null } });
+    return NextResponse.json({ ok: true, notificationsSent: sent, demandIntentsExpired: expired.count, mealsAutoClosed: toClose.length, limit, hasMore: deadlineSoon.length === limit || todayMatches.length === limit || soonMatches.length === limit || awaitingCompletion.length === limit || staleCandidates.length === limit || winBackCandidates.length === limit, nextCursor: { mealCursor: deadlineSoon.at(-1)?.id ?? null, matchCursor: todayMatches.at(-1)?.id ?? soonMatches.at(-1)?.id ?? null, completionCursor: awaitingCompletion.at(-1)?.id ?? null, staleCursor: staleCandidates.at(-1)?.id ?? null, winBackCursor: winBackCandidates.at(-1)?.id ?? null } });
   });
 }

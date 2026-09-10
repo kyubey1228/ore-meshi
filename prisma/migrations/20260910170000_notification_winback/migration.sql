@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'WIN_BACK_FIRST_ACTION';

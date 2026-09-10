@@ -688,6 +688,7 @@ enum NotificationType {
   DEMAND_MATCH_FOUND
   MEAL_COMPLETION_CHECK
   MEAL_AUTO_CLOSED
+  WIN_BACK_FIRST_ACTION
 }
 
 enum NotificationCategory {
