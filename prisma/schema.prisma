@@ -622,6 +622,7 @@ enum NotificationType {
   DEMAND_CLUSTER_READY
   DEMAND_MATCH_FOUND
   MEAL_COMPLETION_CHECK
+  MEAL_AUTO_CLOSED
 }
 
 enum NotificationCategory {

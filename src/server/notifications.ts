@@ -17,6 +17,7 @@ const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
   DEMAND_CLUSTER_READY: 'RECOMMENDATION',
   DEMAND_MATCH_FOUND: 'RECOMMENDATION',
   MEAL_COMPLETION_CHECK: 'PARTICIPATION',
+  MEAL_AUTO_CLOSED: 'RECRUITMENT',
 };
 
 // 最初にメール化する通知は絞る(全通知を最初からメール化しない)。ここに無い種類はin-appのみ。
