@@ -255,6 +255,10 @@ model User {
   favorites              Favorite[]
   referralsGiven         Referral[]           @relation("ReferralReferrer")
   referralsReceived      Referral[]           @relation("ReferralReferred")
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  demandIntents          DemandIntent[]
+  recommendationProfile  UserRecommendationProfile?
   accounts               Account[]
   sessions               Session[]
   hostedMeals            Meal[]               @relation("MealHost")
@@ -482,6 +486,24 @@ enum GrowthEventType {
   GUEST_FAVORITES_MERGED
   EXPERIMENT_EXPOSED
   EXPERIMENT_CONVERSION
+  NOTIFICATION_CREATED
+  NOTIFICATION_SENT
+  NOTIFICATION_OPENED
+  NOTIFICATION_CLICKED
+  NOTIFICATION_CONVERSION
+  DEMAND_INTENT_CREATED
+  DEMAND_INTENT_MATCHED
+  DEMAND_CLUSTER_VIEWED
+  DEMAND_RECRUITMENT_CREATED
+  DEMAND_MATCH_COMPLETED
+  RECRUITMENT_PREDICTION_VIEWED
+  RECRUITMENT_PREDICTION_APPLIED
+  DINING_FEEDBACK_SUBMITTED
+  RECOMMENDATION_PROFILE_UPDATED
+  REFERRAL_REWARD_EARNED
+  REFERRAL_ACTIVATION_COMPLETED
+  REPEAT_JOIN_STARTED
+  REPEAT_RECRUITMENT_CREATED
 }
 
 model GrowthEvent {
@@ -551,12 +573,92 @@ model Referral {
   source           String?
   createdAt        DateTime  @default(now())
   convertedAt      DateTime?
+  activatedAt      DateTime?
   referrer         User      @relation("ReferralReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
   referred         User?     @relation("ReferralReferred", fields: [referredUserId], references: [id], onDelete: SetNull)
 
   @@index([referralCode])
   @@index([referrerUserId])
   @@index([referredUserId])
+}
+
+enum NotificationType {
+  JOIN_REQUEST_RECEIVED
+  JOIN_REQUEST_ACCEPTED
+  MEAL_MATCHED
+  LAST_SLOT_REACHED
+  DEADLINE_SOON
+  MEAL_TODAY
+  MEAL_STARTING_SOON
+  DEMAND_CLUSTER_READY
+}
+
+enum NotificationCategory {
+  RECRUITMENT
+  PARTICIPATION
+  RECOMMENDATION
+}
+
+model Notification {
+  id        String               @id @default(cuid())
+  userId    String
+  type      NotificationType
+  category  NotificationCategory
+  title     String
+  body      String
+  mealId    String?
+  dedupeKey String               @unique
+  readAt    DateTime?
+  clickedAt DateTime?
+  createdAt DateTime             @default(now())
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+model NotificationPreference {
+  userId                 String   @id
+  recruitmentEnabled     Boolean  @default(true)
+  participationEnabled   Boolean  @default(true)
+  recommendationEnabled  Boolean  @default(true)
+  updatedAt              DateTime @updatedAt
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum DemandIntentStatus {
+  ACTIVE
+  MATCHED
+  EXPIRED
+  CANCELLED
+}
+
+model DemandIntent {
+  id               String             @id @default(cuid())
+  userId           String
+  area             String
+  genre            String?
+  timeRange        String?
+  desiredGroupSize Int                @default(2)
+  status           DemandIntentStatus @default(ACTIVE)
+  createdAt        DateTime           @default(now())
+  expiresAt        DateTime
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([area, genre, status, createdAt])
+  @@index([status, expiresAt])
+  @@index([userId])
+}
+
+model UserRecommendationProfile {
+  userId           String   @id
+  genreWeights     Json     @default("{}")
+  areaWeights      Json     @default("{}")
+  groupSizeWeights Json     @default("{}")
+  timeWeights      Json     @default("{}")
+  sampleSize       Int      @default(0)
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model BillingCustomer {
@@ -869,6 +971,9 @@ model Meal {
   paymentType     PaymentType
   maxParticipants Int
   status          MealStatus  @default(OPEN)
+  firstJoinAt     DateTime?
+  matchedAt       DateTime?
+  demandClusterKey String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -883,6 +988,7 @@ model Meal {
 
   @@index([hostId, createdAt])
   @@index([status, area, createdAt])
+  @@index([area, genre, status])
 }
 
 model DiningType {
