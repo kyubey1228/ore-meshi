@@ -409,6 +409,33 @@ model SalesCandidate {
   @@index([status, opportunityScore])
 }
 
+enum SocialContentStatus {
+  DRAFT
+  APPROVED
+  POSTED
+}
+
+enum SocialContentChannel {
+  X
+  INSTAGRAM
+  TIKTOK
+  THREADS
+}
+
+// SocialPostは店舗キャンペーン専用(businessAccountId必須)のため転用せず、
+// サービス全体・匿名集計値ベースのGrowthコンテンツ案は別モデルとして持つ。
+// 自動投稿APIとは連携せず、コピーして手動投稿する運用を前提とする(DRAFT→APPROVED→POSTEDは手動遷移)。
+model SocialContentDraft {
+  id        String               @id @default(cuid())
+  channel   SocialContentChannel
+  body      String
+  status    SocialContentStatus  @default(DRAFT)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([status, createdAt])
+}
+
 model FirstTimeOffer {
   id                    String        @id @default(cuid())
   name                  String
@@ -563,6 +590,10 @@ enum GrowthEventType {
   MEAL_COMPLETION_CONFIRMATION_REQUESTED
   MEAL_COMPLETED
   MEAL_NOT_COMPLETED
+  GROWTH_RECOMMENDATION_CREATED
+  GROWTH_RECOMMENDATION_ACTIONED
+  CONTENT_DRAFT_CREATED
+  CONTENT_DRAFT_POSTED
 }
 
 model GrowthEvent {

@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { getGrowthDashboard } from '@/server/growth-admin';
 import { getCompletionStats, getDemandDashboard, getNotificationAnalysis, getPhase3Overview, getRepeatStats, getSupplyDemandGap, getTimeToMatchStats } from '@/server/phase3-admin';
 import { getGrowthInsights } from '@/server/growth-insights';
+import { recordGrowthRecommendationAction } from '@/server/actions/growth-recommendations';
+import { TrackedRecommendationLink } from '@/components/admin/tracked-recommendation-link';
 import { measurePerformance } from '@/lib/performance';
 
 export const metadata = { title: 'Growth Dashboard' };
@@ -42,11 +44,18 @@ export default async function GrowthDashboard({ searchParams }: { searchParams: 
       <div className="row wrap">
         <Link className="text-link" href="/admin/leads">営業Lead管理へ →</Link>
         <Link className="text-link" href="/admin/business">Business Dashboardへ →</Link>
+        <Link className="text-link" href="/admin/sales">営業候補・Sales Queueへ →</Link>
+        <Link className="text-link" href="/admin/content">Content Studioへ →</Link>
       </div>
 
       <div className="panel">
         <h2>今週確認すべき変化</h2>
-        {insights.map((text, i) => <p key={i}>・{text}</p>)}
+        {insights.map((item, i) => (
+          <div key={i} className="row wrap" style={{ alignItems: 'baseline' }}>
+            <p>・{item.text}</p>
+            {item.actions.map(a => <TrackedRecommendationLink key={a.href} href={a.href} label={a.label} category={item.category} action={recordGrowthRecommendationAction} />)}
+          </div>
+        ))}
       </div>
 
       <div className="panel">
