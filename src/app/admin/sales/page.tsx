@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { getAdminSalesCandidates, generateSalesCandidates, adminUpdateSalesCandidateStatus, adminUpdateSalesCandidateMemo, generateSalesCopy, getSalesQueue } from '@/server/sales-candidates';
+import { getAdminSalesCandidates, generateSalesCopy, getSalesQueue } from '@/server/sales-candidates';
+import { generateSalesCandidates, adminUpdateSalesCandidateStatus, adminUpdateSalesCandidateMemo } from '@/server/actions/admin-sales';
 import { getAreaGenreMatrix } from '@/server/business-intelligence';
 import { InlineStatusForm } from '@/components/inline-status-form';
 import { GenerateCandidatesButton } from '@/components/admin/generate-candidates-button';

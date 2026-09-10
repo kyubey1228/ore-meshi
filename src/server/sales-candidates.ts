@@ -1,62 +1,12 @@
 import 'server-only';
 import { unstable_cache } from 'next/cache';
-import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/server/admin';
-import { perform } from '@/server/action';
-import { getOpportunityRanking } from '@/server/business-intelligence';
 export { generateSalesCopy } from '@/lib/business-opportunity';
 
 const computeAdminSalesCandidates = () => prisma.salesCandidate.findMany({ orderBy: [{ status: 'asc' }, { opportunityScore: 'desc' }], take: 200 });
 // 一覧は営業運用で頻繁に見るため短めのキャッシュ(30秒)に留める。
 export async function getAdminSalesCandidates() { await requireAdmin(); return unstable_cache(computeAdminSalesCandidates, ['admin-sales-candidates'], { revalidate: 30 })(); }
-
-// Opportunity Ranking(エリア×ジャンル単位、既存のbusiness-intelligence.tsをそのまま利用)の上位を
-// SalesCandidateへ反映する。外部店舗データのスクレイピングは行わず、内部データのみで完結させる。
-// 既に営業が進んでいる候補(NEW以外)はopportunityScoreだけ更新し、ステータスは上書きしない。
-export async function generateSalesCandidates(input: unknown) {
-  return perform(async () => {
-    await requireAdmin();
-    const data = z.object({ days: z.number().int().min(1).max(90).default(30), limit: z.number().int().min(1).max(50).default(20) }).parse(input);
-    const ranking = await getOpportunityRanking(data.days, data.limit);
-    let created = 0, updated = 0;
-    for (const cell of ranking) {
-      const existing = await prisma.salesCandidate.findUnique({ where: { area_genre_storeName: { area: cell.area, genre: cell.genre, storeName: '' } } });
-      if (existing) {
-        await prisma.salesCandidate.update({ where: { id: existing.id }, data: { opportunityScore: cell.opportunityScore } });
-        updated += 1;
-      } else {
-        await prisma.salesCandidate.create({ data: { area: cell.area, genre: cell.genre, opportunityScore: cell.opportunityScore, status: 'NEW' } });
-        created += 1;
-      }
-    }
-    return `/admin/sales?created=${created}&updated=${updated}`;
-  });
-}
-
-const statusSchema = z.object({ id: z.string().min(1), status: z.enum(['NEW', 'CONTACT_READY', 'CONTACTED', 'REPLIED', 'INTERESTED', 'REGISTERED', 'DECLINED', 'DO_NOT_CONTACT']) });
-export async function adminUpdateSalesCandidateStatus(input: unknown) {
-  return perform(async () => {
-    await requireAdmin();
-    const data = statusSchema.parse(input);
-    const movingToContacted = data.status === 'CONTACTED';
-    await prisma.salesCandidate.update({
-      where: { id: data.id },
-      data: { status: data.status, ...(movingToContacted ? { lastContactedAt: new Date(), contactCount: { increment: 1 } } : {}) },
-    });
-    return '/admin/sales';
-  });
-}
-
-const memoSchema = z.object({ id: z.string().min(1), memo: z.string().trim().max(2000) });
-export async function adminUpdateSalesCandidateMemo(input: unknown) {
-  return perform(async () => {
-    await requireAdmin();
-    const data = memoSchema.parse(input);
-    await prisma.salesCandidate.update({ where: { id: data.id }, data: { memo: data.memo || null } });
-    return '/admin/sales';
-  });
-}
 
 // 営業文生成: 生成AI連携は無いため、実データ(需要件数・供給不足数)をテンプレートへ埋め込む方式。
 // サンプル数がMIN_BUSINESS_SAMPLE_SIZE未満、または候補がまだ需要データを持たない場合は
