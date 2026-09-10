@@ -35,6 +35,11 @@ export function matchedShareText(meal:Pick<ShareMeal,'id'|'title'|'area'|'candid
   return ['飯、決まった。','',truncate(when,30),`${truncate(meal.area,24)}で${truncate(meal.title,42)}`,'',`${participantCount}人で飯に行くことになりました。`,'','#誰か飯いこ',mealUrl(meal.id)].join('\n');
 }
 
+export function shareTextForViewer(text:string,viewerIsHost:boolean,hostDisplayName:string){
+  if(viewerIsHost)return text;
+  return `${truncate(hostDisplayName.trim()||'募集者',24)}さんが #誰か飯いこ してるよ！\n\n${text}`;
+}
+
 export function xIntent(text:string){return `https://x.com/intent/tweet?${new URLSearchParams({text}).toString()}`;}
 
 // 共有チャンネルごとにutm_source/mediumを付けたURLを発行する。着地先ページは既にGrowthTrackerを

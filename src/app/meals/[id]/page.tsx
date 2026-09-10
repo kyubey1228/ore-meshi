@@ -23,7 +23,7 @@ import { ReferralShare } from '@/components/referral-share';
 import { ReferralClickRecorder } from '@/components/referral-click-recorder';
 import { RecentlyViewedRecorder } from '@/components/recently-viewed-recorder';
 import { MobileStickyJoinBar } from '@/components/mobile-sticky-join-bar';
-import { appUrl, matchedShareText, mealShareText, mealUrl, remainingSlots, truncate } from '@/lib/social';
+import { appUrl, matchedShareText, mealShareText, mealUrl, remainingSlots, shareTextForViewer, truncate } from '@/lib/social';
 
 type Props={params:Promise<{id:string}>;searchParams:Promise<{ref?:string}>};
 const alt='「俺は誰かと飯が食いたい！」の飯募集';
@@ -53,7 +53,8 @@ export default async function MealDetail({params,searchParams}:Props){
   const host=meal.hostId===userId;
   const myRequest=meal.joinRequests.find(request=>request.userId===userId);
   const remaining=remainingSlots(meal);
-  const shareText=meal.status==='MATCHED'?matchedShareText(meal,meal._count.joinRequests+1):mealShareText(meal);
+  const baseShareText=meal.status==='MATCHED'?matchedShareText(meal,meal._count.joinRequests+1):mealShareText(meal);
+  const shareText=shareTextForViewer(baseShareText,host,meal.host.displayName);
   const url=mealUrl(id);
   const firstCandidate=meal.candidates[0];
   const jsonLd=firstCandidate?{

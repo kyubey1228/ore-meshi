@@ -23,6 +23,12 @@ export default async function Image({params}:{params:Promise<{id:string}>}){
         <span>🍚 俺は誰かと飯が食いたい！</span><span style={{color:'#f05a28'}}>#誰か飯いこ</span>
       </div>
       <div style={{display:'flex',flex:1,flexDirection:'column',justifyContent:'center'}}>
+        <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:20}}>
+          {meal.host.image
+            ?<img src={meal.host.image} alt="" width="58" height="58" style={{borderRadius:999,border:'3px solid #25231f'}}/>
+            :<div style={{width:58,height:58,borderRadius:999,background:'#25231f',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,fontWeight:900}}>{meal.host.displayName.slice(0,1)}</div>}
+          <div style={{display:'flex',flexDirection:'column'}}><span style={{fontSize:27,fontWeight:900}}>{truncate(meal.host.displayName,24)}さんの募集</span><span style={{fontSize:21,color:'#5f5a52'}}>𝕏 @{truncate(meal.host.twitterUsername,26)}</span></div>
+        </div>
         <div style={{display:'flex',alignItems:'center',gap:22,color:'#b43e14',fontSize:32,fontWeight:800}}><span>{statusCopy[meal.status]}</span>{state&&<span style={{background:'#fff0e8',borderRadius:999,padding:'5px 18px'}}>{state}</span>}</div>
         <div style={{fontSize:61,lineHeight:1.18,fontWeight:900,marginTop:18}}>{truncate(meal.title,42)}</div>
         <div style={{display:'flex',gap:28,fontSize:31,marginTop:25}}><span>{truncate(when,34)}</span><span>📍 {truncate(meal.area,24)}</span></div>
