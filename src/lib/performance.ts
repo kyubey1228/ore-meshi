@@ -1,6 +1,6 @@
 import 'server-only';
 
-export type PerfCategory = 'DB' | 'AUTH' | 'HOME' | 'ADMIN' | 'RECOMMENDATION' | 'MATCH_SCORE' | 'NOTIFICATION';
+export type PerfCategory = 'DB' | 'AUTH' | 'HOME' | 'ADMIN' | 'RECOMMENDATION' | 'MATCH_SCORE' | 'NOTIFICATION' | 'BUSINESS';
 const WARN_MS = 100;
 
 export function logPerformance(category: PerfCategory, label: string, durationMs: number) {
