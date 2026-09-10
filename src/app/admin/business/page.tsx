@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getAreaGenreDashboard, getOpportunityRanking, getSalesSummary, MIN_BUSINESS_SAMPLE_SIZE } from '@/server/business-intelligence';
 import { getAcquisitionDashboard, getCampaignDashboard } from '@/server/acquisition';
-import { getMonetizationSummary } from '@/server/monetization';
+import { getMonetizationSummary, getRetentionStats, getSponsorCompletionStats } from '@/server/monetization';
 import { measurePerformance } from '@/lib/performance';
 
 export const metadata = { title: 'Business Dashboard' };
@@ -13,13 +13,15 @@ function percent(n: number) { return `${Math.round(n * 100)}%`; }
 export default async function BusinessDashboard({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const { days: rawDays } = await searchParams;
   const days = PERIODS.includes(Number(rawDays)) ? Number(rawDays) : 30;
-  const [areaGenre, opportunity, salesSummary, acquisition, campaigns, monetization] = await measurePerformance('ADMIN', 'business dashboard aggregates', () => Promise.all([
+  const [areaGenre, opportunity, salesSummary, acquisition, campaigns, monetization, retention, sponsorCompletion] = await measurePerformance('ADMIN', 'business dashboard aggregates', () => Promise.all([
     getAreaGenreDashboard(days),
     getOpportunityRanking(days),
     getSalesSummary(days),
     getAcquisitionDashboard(days),
     getCampaignDashboard(days),
     getMonetizationSummary(days),
+    getRetentionStats(days),
+    getSponsorCompletionStats(days),
   ]));
 
   return (
@@ -52,6 +54,32 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
           <div><strong>{percent(monetization.checkoutConversionRate)}</strong><span>Checkout Conversion Rate</span></div>
         </div>
         <p className="muted">MRRはキャッシュ済みのStripe価格 × 有効なSTANDARD/PRO契約数の概算値です（日割り・管理者による手動プラン付与は考慮していません）。FREEプラン数は有効な店舗数からSTANDARD/PRO契約数を差し引いた概算値です。単発売上はSponsorOrder（決済確定済みのみ）の実額合計で、Stripe APIを毎回呼び出さずDB内の記録から算出しています。</p>
+      </div>
+
+      <div className="panel">
+        <h2>収益 North Star（過去{days}日）</h2>
+        <p className="muted">スポンサー飯5,000円は広告表示ではなく、実際のMeal成立・開催確認まで追跡します。MatchedとCompletedは別概念です。</p>
+        <div className="analytics-grid">
+          <div><strong>{sponsorCompletion.completedMeals}</strong><span>Sponsor Completed Meals</span></div>
+          <div><strong>{sponsorCompletion.completedParticipants}</strong><span>Sponsor Completed Participants</span></div>
+          <div><strong>{sponsorCompletion.matchedMeals}</strong><span>Sponsor Matched Meals</span></div>
+          <div><strong>{retention.payingBusinessAccounts}</strong><span>Paying Business Accounts</span></div>
+          <div><strong>{retention.repeatBuyers}</strong><span>Repeat Sponsor Purchases（店舗数）</span></div>
+          <div><strong>{monetization.mrr === null ? 'データ不足' : `¥${Math.round(monetization.mrr).toLocaleString('ja-JP')}`}</strong><span>MRR</span></div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2>Business Retention（過去{days}日）</h2>
+        <div className="analytics-grid">
+          <div><strong>{retention.newPayingBusinessAccounts}</strong><span>New Paying Businesses</span></div>
+          <div><strong>{retention.repeatBuyers}</strong><span>Repeat Buyers（単発商品2回以上）</span></div>
+          <div><strong>{percent(retention.repeatPurchaseRate)}</strong><span>Repeat Purchase Rate</span></div>
+          <div><strong>{percent(retention.sponsoredMealRepeatRate)}</strong><span>Sponsored Meal Repeat Rate</span></div>
+          <div><strong>{percent(retention.seatCampaignRepeatRate)}</strong><span>Seat Campaign Repeat Rate</span></div>
+          <div><strong>{monetization.subscriptionCounts.FREE ? percent(monetization.subscriptionCounts.STANDARD / (monetization.subscriptionCounts.FREE + monetization.subscriptionCounts.STANDARD)) : 'データ不足'}</strong><span>Subscription Conversion（FREE→STANDARD、概算）</span></div>
+        </div>
+        <p className="muted">Repeat Buyerは期間内にPAID状態の単発スポンサー商品(スポンサー飯/空席スポンサー/エリアスポンサー)を2回以上購入したBusinessです。Subscription ConversionはFREE/STANDARDの現在の店舗数比率からの概算で、実際の遷移イベント履歴ではありません。</p>
       </div>
 
       <div className="panel">

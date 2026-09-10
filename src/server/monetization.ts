@@ -58,3 +58,56 @@ export async function getMonetizationSummary(days: number) {
   await requireAdmin();
   return unstable_cache(computeMonetizationSummary, ['monetization-summary'], { revalidate: 60 })(days);
 }
+
+// Repeat Buyer = 期間内にPAID状態の単発スポンサー商品(スポンサー飯/空席スポンサー)を2回以上購入したBusiness。
+// PAID状態のSponsorOrderと有効なSubscription同期状態のみを売上のsource of truthとし、Checkout Startedは含めない。
+async function computeRetentionStats(days: number) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const [ordersByBusiness, sponsoredMealOrdersByBusiness, seatCampaignOrdersByBusiness, firstOrderByBusiness] = await Promise.all([
+    prisma.sponsorOrder.groupBy({ by: ['businessAccountId'], where: { status: 'PAID', paidAt: { gte: since }, orderType: { in: ['SPONSORED_MEAL', 'SEAT_CAMPAIGN', 'AREA_FEATURED'] } }, _count: { _all: true } }),
+    prisma.sponsorOrder.groupBy({ by: ['businessAccountId'], where: { status: 'PAID', paidAt: { gte: since }, orderType: 'SPONSORED_MEAL' }, _count: { _all: true } }),
+    prisma.sponsorOrder.groupBy({ by: ['businessAccountId'], where: { status: 'PAID', paidAt: { gte: since }, orderType: 'SEAT_CAMPAIGN' }, _count: { _all: true } }),
+    prisma.sponsorOrder.groupBy({ by: ['businessAccountId'], where: { status: 'PAID' }, _min: { paidAt: true } }),
+  ]);
+  const payingBusinessAccounts = ordersByBusiness.length;
+  const repeatBuyers = ordersByBusiness.filter(o => o._count._all >= 2).length;
+  const sponsoredMealPayers = sponsoredMealOrdersByBusiness.length;
+  const sponsoredMealRepeat = sponsoredMealOrdersByBusiness.filter(o => o._count._all >= 2).length;
+  const seatCampaignPayers = seatCampaignOrdersByBusiness.length;
+  const seatCampaignRepeat = seatCampaignOrdersByBusiness.filter(o => o._count._all >= 2).length;
+  const firstPaidIds = new Set(firstOrderByBusiness.filter(o => o._min.paidAt && o._min.paidAt >= since).map(o => o.businessAccountId));
+
+  return {
+    payingBusinessAccounts,
+    newPayingBusinessAccounts: firstPaidIds.size,
+    repeatBuyers,
+    repeatPurchaseRate: payingBusinessAccounts ? repeatBuyers / payingBusinessAccounts : 0,
+    sponsoredMealRepeatRate: sponsoredMealPayers ? sponsoredMealRepeat / sponsoredMealPayers : 0,
+    seatCampaignRepeatRate: seatCampaignPayers ? seatCampaignRepeat / seatCampaignPayers : 0,
+  };
+}
+export async function getRetentionStats(days: number) {
+  await requireAdmin();
+  return unstable_cache(computeRetentionStats, ['retention-stats'], { revalidate: 60 })(days);
+}
+
+// North Star: スポンサー飯が実際にCompleted(開催確認)まで到達した数。Matchedと混同しない。
+async function computeSponsorCompletionStats(days: number) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const sponsoredMeals = await prisma.sponsoredMeal.findMany({
+    where: { status: 'ACTIVE', mealId: { not: null }, createdAt: { gte: since } },
+    select: { meal: { select: { matches: { select: { status: true, _count: { select: { participants: true } } } } } } },
+  });
+  let completedMeals = 0, completedParticipants = 0, matchedMeals = 0;
+  for (const s of sponsoredMeals) {
+    const match = s.meal?.matches[0];
+    if (!match) continue;
+    matchedMeals += 1;
+    if (match.status === 'COMPLETED') { completedMeals += 1; completedParticipants += match._count.participants; }
+  }
+  return { sponsoredMealsWithMeal: sponsoredMeals.length, matchedMeals, completedMeals, completedParticipants };
+}
+export async function getSponsorCompletionStats(days: number) {
+  await requireAdmin();
+  return unstable_cache(computeSponsorCompletionStats, ['sponsor-completion-stats'], { revalidate: 60 })(days);
+}
