@@ -17,3 +17,5 @@ export const JOIN_CTA_COPY: Record<string, string> = {
   B: '無料で参加する',
   C: 'あと1席に参加する',
 };
+
+export const EMPTY_STATE_VARIANTS = ['A', 'B', 'C'] as const;

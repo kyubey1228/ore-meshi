@@ -12,6 +12,9 @@ import { SeatCampaignBanner } from '@/components/seat-campaign-banner';
 import { GrowthTracker, TrackedLink } from '@/components/growth-tracker';
 import { RankedMealGrid } from '@/components/ranked-meal-grid';
 import { RecentlyViewedSection } from '@/components/recently-viewed';
+import { getEmptyStateData } from '@/server/empty-state';
+import { buildEmptyState } from '@/lib/empty-state';
+import { EMPTY_STATE_VARIANTS, getVariant } from '@/lib/experiments';
 
 export const metadata={title:'誰かの飯に乗っかる'};
 
@@ -48,6 +51,9 @@ export default async function Meals({searchParams}:{searchParams:Promise<Record<
   const context={preferredArea:preferences?.preferredArea,preferredGenres:preferences?.preferredGenres,recommendationProfile};
   const meals=await getMealList(filters,context);
   const recentMeals=meals.length?[]:await getRecentOpenMeals(4);
+  const emptyData=meals.length?null:await getEmptyStateData(filters.area);
+  const emptyVariant=getVariant('meal_empty_state',userId??filters.area??'anonymous',EMPTY_STATE_VARIANTS);
+  const emptyCopy=emptyData?buildEmptyState({...emptyData,area:filters.area,variant:emptyVariant}):null;
   const createHref=userId?'/meals/new':`/login?next=${encodeURIComponent('/meals/new')}`;
   const personalizationEnabled=Boolean(preferences?.preferredArea||preferences?.preferredGenres.length);
   const rankedItems=rankMeals(meals,{...context,now:new Date()}).map(r=>({meal:r.meal,reason:r.reason}));
@@ -79,9 +85,12 @@ export default async function Meals({searchParams}:{searchParams:Promise<Record<
     <p className="muted">{meals.length}件の飯 {personalizationEnabled?'· あなた向けにおすすめ順で表示':'· あと1人、開催日時、新着順を考慮して表示'}</p>
     {meals.length?<RankedMealGrid items={rankedItems} personalizationEnabled={personalizationEnabled}/>:(
       <div className="empty">
+        <GrowthTracker eventType="EMPTY_STATE_VIEWED" area={filters.area} variant={emptyVariant} source="meals_list" loggedIn={Boolean(userId)}/>
         <span className="empty-icon">🍚</span>
-        <p>{filters.area?`${filters.area}ではまだ募集がありません。`:'今は誰も飯を募集してないみたい。'}<br/>最初の募集を作ってみませんか？</p>
-        <TrackedLink className="btn" eventType="RECRUITMENT_CREATE_CLICKED" payload={{area:filters.area,loggedIn:Boolean(userId),source:'empty_state'}} href={createHref}>募集を作る →</TrackedLink>
+        <p>{emptyCopy?.headline}</p>
+        {emptyCopy?.timingText&&<p className="muted">{emptyCopy.timingText}</p>}
+        {emptyCopy?.nearbyText&&<p>{emptyCopy.nearbyText}</p>}
+        <div className="row center wrap"><TrackedLink className="btn" eventType="EMPTY_STATE_CTA_CLICKED" payload={{area:filters.area,loggedIn:Boolean(userId),source:'create',variant:emptyVariant}} href={createHref}>{emptyCopy?.primaryLabel} →</TrackedLink><TrackedLink className="btn secondary" eventType="EMPTY_STATE_CTA_CLICKED" payload={{area:filters.area,loggedIn:Boolean(userId),source:'demand',variant:emptyVariant}} href="/demand">希望を登録</TrackedLink></div>
       </div>
     )}
     {recentMeals.length>0&&<div className="section-heading"><h2>新着の募集</h2></div>}

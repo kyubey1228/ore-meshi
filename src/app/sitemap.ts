@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { prisma } from '@/lib/prisma';
 import { appUrl } from '@/lib/social';
+import { getIndexableAreaGenres } from '@/server/genre-seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,12 +14,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   if (!process.env.DATABASE_URL) return staticRoutes;
 
-  const meals = await prisma.meal.findMany({
+  const [meals, areaGenres] = await Promise.all([prisma.meal.findMany({
     where: { status: { in: ['OPEN', 'MATCHED'] } },
     orderBy: { createdAt: 'desc' },
     take: 200,
     select: { id: true, updatedAt: true, area: true },
-  });
+  }), getIndexableAreaGenres()]);
 
   const mealRoutes: MetadataRoute.Sitemap = meals.map(meal => ({
     url: `${base}/meals/${meal.id}`,
@@ -34,5 +35,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticRoutes, ...areaRoutes, ...mealRoutes];
+  const genreRoutes: MetadataRoute.Sitemap = areaGenres.map(item => ({ url: `${base}/recruitments/${encodeURIComponent(item.area)}/${encodeURIComponent(item.genre)}`, lastModified: item.generatedAt, changeFrequency: 'daily', priority: 0.65 }));
+  return [...staticRoutes, ...areaRoutes, ...genreRoutes, ...mealRoutes];
 }
