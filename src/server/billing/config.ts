@@ -28,11 +28,14 @@ export function getSubscriptionPriceId(plan: Exclude<BusinessPlan, 'FREE'>) {
 export function getPlanDiscountCouponId(plan: Exclude<BusinessPlan, 'FREE'>): string | undefined {
   const name = plan === 'STANDARD' ? 'STRIPE_COUPON_STANDARD' : 'STRIPE_COUPON_PRO';
   const value = process.env[name];
-  return value && value.trim() ? value.trim() : undefined;
+  if (!value?.trim()) return undefined;
+
+  // Stripe Dashboardで表示されるCoupon IDは `coupon_` を含まない。運用時に
+  // リソース種別を示す接頭辞として付けて保存された既存設定も受け入れる。
+  return value.trim().replace(/^coupon_/, '');
 }
 
 export function appUrl(path = '') {
   const base = z.string().url().parse(process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL);
   return new URL(path, base.endsWith('/') ? base : `${base}/`).toString();
 }
-
