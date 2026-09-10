@@ -247,6 +247,9 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   isAdmin         Boolean   @default(false)
+  preferredArea         String?
+  preferredGenres       String[] @default([])
+  onboardingCompletedAt DateTime?
 
   accounts               Account[]
   sessions               Session[]
@@ -435,6 +438,41 @@ model BusinessMarketingEvent {
   @@index([sessionKey, createdAt])
   @@index([businessAccountId, eventType])
   @@index([leadId])
+}
+
+enum GrowthEventType {
+  SIGNUP_CTA_VIEW
+  SIGNUP_STARTED
+  SIGNUP_COMPLETED
+  RECRUITMENT_VIEWED
+  RECRUITMENT_JOIN_CLICKED
+  RECRUITMENT_CREATE_CLICKED
+  RECRUITMENT_SHARED
+  RECRUITMENT_SHARE_X
+  RECRUITMENT_SHARE_LINE
+  RECRUITMENT_URL_COPIED
+  ONBOARDING_STARTED
+  ONBOARDING_COMPLETED
+  RECRUITMENT_JOIN_COMPLETED
+}
+
+model GrowthEvent {
+  id            String          @id @default(cuid())
+  sessionKey    String
+  userId        String?
+  eventType     GrowthEventType
+  recruitmentId String?
+  area          String?
+  foodCategory  String?
+  loggedIn      Boolean         @default(false)
+  source        String?
+  referrer      String?
+  shareType     String?
+  createdAt     DateTime        @default(now())
+
+  @@index([eventType, createdAt])
+  @@index([sessionKey, createdAt])
+  @@index([recruitmentId])
 }
 
 model BillingCustomer {
