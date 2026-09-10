@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateContentIdeas } from '../src/server/content-studio';
+import { generateContentIdeas } from '../src/lib/content-ideas';
 
 test('generateContentIdeasはデータが無い項目のテンプレートを生成しない', () => {
   const ideas = generateContentIdeas({ weeklyCompleted: 0, weeklyUniqueDiners: 0, topArea: null, openMealsTopArea: null, highDemandCell: null });

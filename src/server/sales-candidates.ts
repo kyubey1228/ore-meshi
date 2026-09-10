@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/server/admin';
 import { perform } from '@/server/action';
-import { getOpportunityRanking, MIN_BUSINESS_SAMPLE_SIZE } from '@/server/business-intelligence';
+import { getOpportunityRanking } from '@/server/business-intelligence';
+export { generateSalesCopy } from '@/lib/business-opportunity';
 
 const computeAdminSalesCandidates = () => prisma.salesCandidate.findMany({ orderBy: [{ status: 'asc' }, { opportunityScore: 'desc' }], take: 200 });
 // 一覧は営業運用で頻繁に見るため短めのキャッシュ(30秒)に留める。
@@ -60,26 +61,6 @@ export async function adminUpdateSalesCandidateMemo(input: unknown) {
 // 営業文生成: 生成AI連携は無いため、実データ(需要件数・供給不足数)をテンプレートへ埋め込む方式。
 // サンプル数がMIN_BUSINESS_SAMPLE_SIZE未満、または候補がまだ需要データを持たない場合は
 // 具体的な数値を出さず「食事相手を探しているユーザーがいます」程度に留める(捏造しない)。
-export type SalesCopyInput = { area: string; genre: string; demandIntents: number; activeMeals: number; days: number };
-
-function hasSufficientData(input: SalesCopyInput) {
-  return input.demandIntents + input.activeMeals >= MIN_BUSINESS_SAMPLE_SIZE;
-}
-
-export function generateSalesCopy(input: SalesCopyInput) {
-  const gap = Math.max(0, input.demandIntents - input.activeMeals);
-  const sufficient = hasSufficientData(input);
-  const dataLine = sufficient
-    ? `直近${input.days}日間、${input.area}エリアでは${input.genre}カテゴリの食事需要が${input.demandIntents}件ありました(現在の募集は${input.activeMeals}件、不足${gap}件)。`
-    : `${input.area}エリアで${input.genre}を含む食事相手を探しているユーザーがいます。`;
-
-  const contactForm = [`「俺は誰かと飯が食いたい！」と申します。${dataLine}`, '貴店を無料で掲載できます。まずは今日の空席だけ掲載して試すこともできます。', 'よろしければ詳細をお送りします。'].join('\n');
-  const email = [`件名: ${input.area}エリアでの集客・空席対策のご案内`, '', 'はじめまして、「俺は誰かと飯が食いたい！」運営です。', '', dataLine, '', '無料で店舗ページを作成でき、有料機能は後から選べます。今日の空席だけ掲載して試すこともできます。', '', 'ご興味があれば、下記より無料登録いただけます。', '(登録URLはここに挿入)'].join('\n');
-  const dm = [`【${input.area}】${dataLine}`, '無料で店舗ページを作成できます。今日の空席だけ掲載して試すこともできます。よければDMでご案内します。'].join('\n');
-  const phoneScript = [`お忙しいところ失礼します。「俺は誰かと飯が食いたい！」という飲食店向け集客サービスの者です。`, dataLine, '無料で登録でき、今日の空席だけ掲載して試すこともできます。1分ほどお時間よろしいでしょうか？'].join('\n');
-
-  return { contactForm, email, dm, phoneScript, dataSufficient: sufficient };
-}
 
 // Priority F: Sales Queue。開発者が考えなくても「今日何をすればいいか」がAdminを開くだけで
 // 分かる状態にする。新規テーブルは増やさず、既存3つのデータソースを束ねるだけに留める。

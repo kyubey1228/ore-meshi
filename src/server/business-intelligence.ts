@@ -3,11 +3,12 @@ import { unstable_cache } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/server/admin';
 import { toCsv } from '@/lib/csv';
+import { computeOpportunityScore, rankOpportunity, MIN_BUSINESS_SAMPLE_SIZE } from '@/lib/business-opportunity';
+export { computeOpportunityScore, rankOpportunity, MIN_BUSINESS_SAMPLE_SIZE } from '@/lib/business-opportunity';
 
 export { toCsv };
 
 // 店舗営業に使う集計は、極端に少数の行動から個人が推測できないよう、この件数未満は「データ不足」として抑制する。
-export const MIN_BUSINESS_SAMPLE_SIZE = 5;
 
 function genreKey(g: string | null) { return g ?? '未指定'; }
 function cellKey(area: string, genre: string | null) { return `${area}|||${genreKey(genre)}`; }
@@ -54,18 +55,6 @@ export async function getAreaGenreDashboard(days: number, limit = 60) {
 
 // Opportunity Score = 需要件数 + 供給不足分(需要-供給の不足)×2 + 過去の成立実績×1。
 // 複雑なAIモデルは使わず、この加重和のみで説明可能にしている。
-export function computeOpportunityScore(c: { demandIntents: number; activeMeals: number; completedMeals: number }) {
-  const gap = Math.max(0, c.demandIntents - c.activeMeals);
-  return c.demandIntents * 1 + gap * 2 + c.completedMeals * 1;
-}
-
-export function rankOpportunity(cells: Cell[], limit: number) {
-  return cells
-    .filter(c => c.demandIntents + c.activeMeals >= MIN_BUSINESS_SAMPLE_SIZE)
-    .map(c => ({ ...c, fillRate: c.activeMeals ? c.matchedMeals / c.activeMeals : 0, opportunityScore: computeOpportunityScore(c) }))
-    .sort((a, b) => b.opportunityScore - a.opportunityScore)
-    .slice(0, limit);
-}
 
 export async function getOpportunityRanking(days: number, limit = 10) {
   await requireAdmin();

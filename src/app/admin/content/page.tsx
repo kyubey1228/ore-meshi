@@ -41,6 +41,7 @@ export default async function AdminContent() {
             <p className="muted">作成: {dateTimeLabel(draft.createdAt)}</p>
             <InlineStatusForm id={draft.id} currentStatus={draft.status} options={STATUS_OPTIONS} labels={STATUS_LABEL_JA} action={adminUpdateContentDraftStatus} />
             <CopyTextButton text={draft.body} />
+            <div className="row wrap"><a className="btn secondary" href={`/api/admin/content/${draft.id}/image?format=square`} target="_blank" rel="noreferrer">画像を生成</a><a className="text-link" href={`/api/admin/content/${draft.id}/image?format=square&download=1`} download>画像を保存</a><a className="text-link" href={`/api/admin/content/${draft.id}/image?format=portrait`} target="_blank" rel="noreferrer">縦長</a><a className="text-link" href={`/api/admin/content/${draft.id}/image?format=story`} target="_blank" rel="noreferrer">ストーリー</a></div>
           </article>
         ))}
         {!drafts.length && <p className="muted">まだ下書きがありません。上のボタンから生成してください。</p>}

@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeOpportunityScore, rankOpportunity, MIN_BUSINESS_SAMPLE_SIZE } from '../src/server/business-intelligence';
-import { generateSalesCopy } from '../src/server/sales-candidates';
+import { computeOpportunityScore, rankOpportunity, MIN_BUSINESS_SAMPLE_SIZE, generateSalesCopy } from '../src/lib/business-opportunity';
 
 test('computeOpportunityScoreは需要+供給不足×2+実績で算出する', () => {
   assert.equal(computeOpportunityScore({ demandIntents: 10, activeMeals: 4, completedMeals: 2 }), 10 + 6 * 2 + 2);
