@@ -3,16 +3,20 @@ import { z } from 'zod';
 import { mealSchema, idSchema } from '@/validators';
 import { perform, transaction, ensure } from '@/server/action';
 import { getReferralAttribution } from '@/server/business';
+import { notifyMatchingDemandIntents } from '@/server/demand';
 export async function createMeal(input: unknown) { return perform(async userId => {
   const {candidates,deadline,purposeIds,...meal}=mealSchema.parse(input);
   const attribution=await getReferralAttribution();
-  return transaction(async tx=>{
+  const result=await transaction(async tx=>{
     const activePurposes=await tx.mealPurpose.count({where:{id:{in:purposeIds},isActive:true}});
     ensure(activePurposes===new Set(purposeIds).size,'目的タグを選び直してください。');
-    const result=await tx.meal.create({data:{...meal,deadline:deadline?new Date(deadline):null,hostId:userId,candidates:{create:candidates.map(c=>({...c,date:new Date(c.date)}))},purposes:{create:purposeIds.map(purposeId=>({purposeId}))}}});
-    if(attribution)await tx.referralEvent.create({data:{businessAccountId:attribution.businessAccountId,socialPostId:attribution.socialPostId,entityType:attribution.entityType,entityId:attribution.entityId,eventType:'MEAL_CREATED',sourceEventId:attribution.id,conversionEntityId:result.id,utmSource:attribution.utmSource,utmMedium:attribution.utmMedium,utmCampaign:attribution.utmCampaign,anonymousId:attribution.anonymousId}});
-    return `/meals/${result.id}`;
+    const created=await tx.meal.create({data:{...meal,deadline:deadline?new Date(deadline):null,hostId:userId,candidates:{create:candidates.map(c=>({...c,date:new Date(c.date)}))},purposes:{create:purposeIds.map(purposeId=>({purposeId}))}}});
+    if(attribution)await tx.referralEvent.create({data:{businessAccountId:attribution.businessAccountId,socialPostId:attribution.socialPostId,entityType:attribution.entityType,entityId:attribution.entityId,eventType:'MEAL_CREATED',sourceEventId:attribution.id,conversionEntityId:created.id,utmSource:attribution.utmSource,utmMedium:attribution.utmMedium,utmCampaign:attribution.utmCampaign,anonymousId:attribution.anonymousId}});
+    return created;
   });
+  const earliestCandidateDate=candidates.map(c=>new Date(c.date)).sort((a,b)=>a.getTime()-b.getTime())[0]??null;
+  await notifyMatchingDemandIntents({mealId:result.id,area:result.area,genre:result.genre,maxParticipants:result.maxParticipants,earliestCandidateDate});
+  return `/meals/${result.id}`;
 }); }
 export async function updateMeal(input: unknown) { return perform(async userId=>{
   const {id,meal:raw}=z.object({id:idSchema,meal:z.unknown()}).parse(input);

@@ -6,6 +6,7 @@ import { getFavoriteMealIds, getHostTrustStats, getMealById, getMealShareData } 
 import { currentUserId } from '@/server/auth';
 import { getOrCreateReferralCode } from '@/server/referral';
 import { resolveJoinIntent } from '@/server/actions/join-intent';
+import { findMatchingActiveIntent } from '@/server/demand';
 import { computeHostTrustBadges } from '@/lib/host-trust';
 import { getVariant, JOIN_CTA_COPY } from '@/lib/experiments';
 import { candidateLabel, paymentLabels, yen, mealStatusLabels, requestStatusLabels, dateTimeLabel } from '@/lib/format';
@@ -68,11 +69,12 @@ export default async function MealDetail({params,searchParams}:Props){
   }:null;
 
   const canJoin=!host&&!myRequest&&meal.status==='OPEN';
-  const [intent,hostStats,favoriteIds,sessionKey]=await Promise.all([
+  const [intent,hostStats,favoriteIds,sessionKey,matchingDemandIntent]=await Promise.all([
     userId&&canJoin?resolveJoinIntent(id,true):Promise.resolve(null),
     getHostTrustStats(meal.hostId),
     userId?getFavoriteMealIds(userId):Promise.resolve([]),
     (async()=>(await cookies()).get('ore_growth_session')?.value??id)(),
+    userId&&canJoin?findMatchingActiveIntent(userId,{area:meal.area,genre:meal.genre,maxParticipants:meal.maxParticipants,earliestCandidateDate:meal.candidates.map(c=>c.date).sort((a,b)=>a.getTime()-b.getTime())[0]??null}):Promise.resolve(null),
   ]);
   const trustBadges=computeHostTrustBadges({hostedCount:hostStats.hostedCount,completedCount:hostStats.completedCount,bio:meal.host.bio,image:meal.host.image,diningTypeCount:meal.host.diningTypes.length});
   const experimentVariants=remaining===1?['A','B','C']:['A','B'];
@@ -90,6 +92,7 @@ export default async function MealDetail({params,searchParams}:Props){
     <div className={`panel detail${meal.status==='OPEN'&&remaining===1?' last-slot':''}`}>
       <div className="row between wrap"><span className="tag">{mealStatusLabels[meal.status]}</span><FavoriteButton mealId={id} loggedIn={Boolean(userId)} initialFavorite={favoriteIds.includes(id)}/></div>
       {meal.status==='OPEN'&&remaining===1&&<p className="last-slot-label">🔥 あと1人で飯決定！</p>}
+      {matchingDemandIntent&&<p className="last-slot-label">🎯 あなたの「行きたい」条件と一致しています</p>}
       {meal.sponsoredMeals[0]&&<p className="last-slot-label">PR · 提供:{meal.sponsoredMeals[0].sponsorName}{meal.sponsoredMeals[0].benefit?` / ${meal.sponsoredMeals[0].benefit}`:''}</p>}
       <h1>{meal.title}</h1>
       <TagPills tags={meal.purposes.map(({purpose})=>purpose)} tone="orange"/>

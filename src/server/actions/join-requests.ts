@@ -6,6 +6,8 @@ import { getReferralAttribution } from '@/server/business';
 import { createNotification } from '@/server/notifications';
 import { checkReferralActivation } from '@/server/referral-activation';
 import { recordGrowthEvent } from '@/server/growth';
+import { findMatchingActiveIntent } from '@/server/demand';
+import { intentMatchesMeal } from '@/lib/demand';
 
 export async function createJoinRequest(input: unknown) {return perform(async userId=>{
   const data=joinSchema.parse(input);
@@ -23,7 +25,8 @@ export async function createJoinRequest(input: unknown) {return perform(async us
     const request=await tx.joinRequest.create({data:{...data,userId}});
     if(!meal.firstJoinAt)await tx.meal.update({where:{id:meal.id},data:{firstJoinAt:new Date()}});
     if(attribution)await tx.referralEvent.create({data:{businessAccountId:attribution.businessAccountId,socialPostId:attribution.socialPostId,entityType:attribution.entityType,entityId:attribution.entityId,eventType:'JOIN_REQUEST',sourceEventId:attribution.id,conversionEntityId:request.id,utmSource:attribution.utmSource,utmMedium:attribution.utmMedium,utmCampaign:attribution.utmCampaign,anonymousId:attribution.anonymousId}});
-    return {requestId:request.id,hostId:meal.hostId,mealId:meal.id,mealTitle:meal.title};
+    const earliestCandidateDate=meal.candidates.map(c=>c.date).sort((a,b)=>a.getTime()-b.getTime())[0]??null;
+    return {requestId:request.id,hostId:meal.hostId,mealId:meal.id,mealTitle:meal.title,mealArea:meal.area,mealGenre:meal.genre,maxParticipants:meal.maxParticipants,earliestCandidateDate};
   });
   await createNotification({
     userId:outcome.hostId,type:'JOIN_REQUEST_RECEIVED',
@@ -31,6 +34,8 @@ export async function createJoinRequest(input: unknown) {return perform(async us
     mealId:outcome.mealId,dedupeKey:`JOIN_REQUEST_RECEIVED:${outcome.requestId}`,
   });
   await checkReferralActivation(userId);
+  const matchingIntent=await findMatchingActiveIntent(userId,{area:outcome.mealArea,genre:outcome.mealGenre,maxParticipants:outcome.maxParticipants,earliestCandidateDate:outcome.earliestCandidateDate});
+  if(matchingIntent)await recordGrowthEvent('DEMAND_JOIN_STARTED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true});
 });}
 export async function cancelJoinRequest(input: unknown) {return perform(async userId=>{
   const id=idSchema.parse(input);
@@ -52,6 +57,10 @@ export async function decideJoinRequest(input: unknown) {return perform(async us
     else {match=await tx.match.create({data:{mealId,candidateId:request.candidateId,scheduledAt:start,participants:{create:{userId}}},include:{participants:true}});}
     await tx.matchParticipant.create({data:{matchId:match.id,userId:request.userId}});
     await tx.joinRequest.update({where:{id},data:{status:'ACCEPTED'}});
+    const earliestCandidateDate=await tx.mealCandidate.findFirst({where:{mealId},orderBy:{date:'asc'},select:{date:true}}).then(c=>c?.date??null);
+    const matchingIntent=(await tx.demandIntent.findMany({where:{userId:request.userId,status:'ACTIVE',expiresAt:{gt:new Date()}}}))
+      .find(intent=>intentMatchesMeal(intent,{area:meal.area,genre:meal.genre,maxParticipants:meal.maxParticipants,earliestCandidateDate}));
+    if(matchingIntent)await tx.demandIntent.update({where:{id:matchingIntent.id},data:{status:'MATCHED',matchedMealId:mealId}});
     const participantCount=await tx.matchParticipant.count({where:{matchId:match.id}});
     ensure(participantCount<=meal.maxParticipants,'その枠は埋まりました。');
     const full=participantCount===meal.maxParticipants;
@@ -65,15 +74,17 @@ export async function decideJoinRequest(input: unknown) {return perform(async us
       if(attribution)await tx.referralEvent.create({data:{businessAccountId:attribution.businessAccountId,socialPostId:attribution.socialPostId,entityType:attribution.entityType,entityId:attribution.entityId,eventType:'MATCHED',sourceEventId:attribution.id,conversionEntityId:match.id,utmSource:attribution.utmSource,utmMedium:attribution.utmMedium,utmCampaign:attribution.utmCampaign,anonymousId:attribution.anonymousId}});
     }
     await tx.joinRequest.updateMany({where:{mealId,status:'PENDING',...(full?{}:{candidateId:{not:request.candidateId}})},data:{status:'REJECTED'}});
-    return {rejected:false as const,href:`/matches/${match.id}`,justMatched:full,matchId:match.id,meal:{title:meal.title,area:meal.area,scheduledAt:start.toISOString(),participantCount},requesterId:request.userId,hostId:userId,mealId,mealTitle:meal.title,mealArea:meal.area,demandClusterKey:meal.demandClusterKey,lastSlot,full,participantIds};
+    return {rejected:false as const,href:`/matches/${match.id}`,justMatched:full,matchId:match.id,meal:{title:meal.title,area:meal.area,scheduledAt:start.toISOString(),participantCount},requesterId:request.userId,hostId:userId,mealId,mealTitle:meal.title,mealArea:meal.area,demandClusterKey:meal.demandClusterKey,lastSlot,full,participantIds,demandJoinCompleted:Boolean(matchingIntent)};
   });
   if(outcome.rejected)return {};
+  if(outcome.demandJoinCompleted)await recordGrowthEvent('DEMAND_JOIN_COMPLETED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true});
   await createNotification({userId:outcome.requesterId,type:'JOIN_REQUEST_ACCEPTED',title:'参加が承認されました',body:`「${outcome.mealTitle}」への参加が承認されました。`,mealId:outcome.mealId,dedupeKey:`JOIN_REQUEST_ACCEPTED:${id}`});
   if(outcome.lastSlot)await createNotification({userId:outcome.hostId,type:'LAST_SLOT_REACHED',title:'残り1席になりました',body:`「${outcome.mealTitle}」はあと1人で成立します。`,mealId:outcome.mealId,dedupeKey:`LAST_SLOT_REACHED:${outcome.mealId}`});
   if(outcome.full){
     for(const participantId of outcome.participantIds){
       await createNotification({userId:participantId,type:'MEAL_MATCHED',title:'飯、決まりました',body:`「${outcome.mealTitle}」の飯が成立しました。`,mealId:outcome.mealId,dedupeKey:`MEAL_MATCHED:${outcome.mealId}:${participantId}`});
     }
+    await recordGrowthEvent('MEAL_MATCHED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true});
     await checkReferralActivation(outcome.requesterId);
     if(outcome.demandClusterKey)await recordGrowthEvent('DEMAND_MATCH_COMPLETED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true});
   }
