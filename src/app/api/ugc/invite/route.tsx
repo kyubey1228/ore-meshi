@@ -1,13 +1,14 @@
 import { ImageResponse } from 'next/og';
 import { getUgcStyle } from '@/lib/ugc';
 import { UgcImageCard } from '@/components/ugc-image-card';
+import { readUgcImageDataUrl } from '@/server/ugc-image';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const style = getUgcStyle(url.searchParams.get('style'));
-  const background = new URL(style.image, url.origin).toString();
+  const background = await readUgcImageDataUrl(style);
   const headers: Record<string, string> = { 'Cache-Control': 'public, max-age=300, s-maxage=3600' };
   if (url.searchParams.get('download') === '1') headers['Content-Disposition'] = `attachment; filename="ore-meshi-invite-${style.id}.png"`;
 

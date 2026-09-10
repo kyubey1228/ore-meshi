@@ -4,6 +4,7 @@ import { candidateLabel } from '@/lib/format';
 import { getUgcStyle } from '@/lib/ugc';
 import { remainingSlots, truncate } from '@/lib/social';
 import { UgcImageCard } from '@/components/ugc-image-card';
+import { readUgcImageDataUrl } from '@/server/ugc-image';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const headline = meal.status === 'MATCHED'
     ? '飯、決まった！'
     : remaining === 1 ? 'あと1人！' : '誰か、飯いかん？';
-  const background = new URL(style.image, url.origin).toString();
+  const background = await readUgcImageDataUrl(style);
   const headers: Record<string, string> = { 'Cache-Control': 'public, max-age=300, s-maxage=3600' };
   if (url.searchParams.get('download') === '1') headers['Content-Disposition'] = `attachment; filename="ore-meshi-${id}-${style.id}.png"`;
 
