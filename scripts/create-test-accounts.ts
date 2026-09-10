@@ -7,14 +7,15 @@ const prisma = new PrismaClient();
 // 既存のprisma/seed.tsが扱う'seed-'プレフィックスとは重ならないよう'phase6-test-'を使う。
 const GENERAL_USER_TWITTER_ID = 'phase6-test-user';
 const OWNER_USER_TWITTER_ID = 'phase6-test-owner';
+const ADMIN_USER_TWITTER_ID = 'phase6-test-admin';
 const BUSINESS_SLUG = 'phase6-test-business';
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // next-authのデフォルト(30日)に合わせる
 
-async function upsertTestUser(twitterId: string, twitterUsername: string, displayName: string, bio: string) {
+async function upsertTestUser(twitterId: string, twitterUsername: string, displayName: string, bio: string, isAdmin = false) {
   return prisma.user.upsert({
     where: { twitterId },
-    create: { twitterId, twitterUsername, displayName, bio, image: `https://api.dicebear.com/9.x/thumbs/svg?seed=${twitterUsername}` },
-    update: { twitterUsername, displayName, bio },
+    create: { twitterId, twitterUsername, displayName, bio, isAdmin, image: `https://api.dicebear.com/9.x/thumbs/svg?seed=${twitterUsername}` },
+    update: { twitterUsername, displayName, bio, isAdmin },
   });
 }
 
@@ -29,6 +30,7 @@ async function mintSessionToken(userId: string, name: string) {
 async function main() {
   const generalUser = await upsertTestUser(GENERAL_USER_TWITTER_ID, 'phase6_test_user', 'テストユーザー(Phase6)', 'Phase6動作確認用のテストアカウントです。');
   const ownerUser = await upsertTestUser(OWNER_USER_TWITTER_ID, 'phase6_test_owner', 'テスト店舗オーナー(Phase6)', 'Phase6動作確認用のテスト店舗オーナーです。');
+  const adminUser = await upsertTestUser(ADMIN_USER_TWITTER_ID, 'phase6_test_admin', 'テスト管理者(Phase6)', '動作確認用のテスト管理者アカウントです。', true);
 
   const business = await prisma.businessAccount.upsert({
     where: { slug: BUSINESS_SLUG },
@@ -53,6 +55,7 @@ async function main() {
 
   const generalToken = await mintSessionToken(generalUser.id, generalUser.displayName);
   const ownerToken = await mintSessionToken(ownerUser.id, ownerUser.displayName);
+  const adminToken = await mintSessionToken(adminUser.id, adminUser.displayName);
   const cookieName = '__Secure-next-auth.session-token';
   const domain = 'ore-meshi.lolipop-now.app';
 
@@ -66,6 +69,11 @@ async function main() {
   console.log(`X username: @${ownerUser.twitterUsername}`);
   console.log(`BusinessAccount: ${business.name} (${business.id}, slug=${business.slug})`);
   console.log(`セッションCookie値:\n${ownerToken}`);
+
+  console.log('\n===== 管理者(テスト、isAdmin=true) =====');
+  console.log(`userId: ${adminUser.id}`);
+  console.log(`X username: @${adminUser.twitterUsername}`);
+  console.log(`セッションCookie値:\n${adminToken}`);
 
   console.log('\n===== ブラウザへの入れ方 =====');
   console.log(`1. Chromeで https://${domain} を開く(未ログインで一度アクセスしてCookieの土台を作る)`);
