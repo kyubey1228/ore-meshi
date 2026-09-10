@@ -20,8 +20,19 @@ function databaseUrl() {
   }
 }
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  datasources: { db: { url: databaseUrl() } },
-});
+function createPrismaClient() {
+  const client = new PrismaClient({
+    datasources: { db: { url: databaseUrl() } },
+    log: [{ emit: 'event', level: 'query' }],
+  });
+  client.$on('query', event => {
+    const message = `[PERF] DB ${event.target} ${event.duration}ms`;
+    if (event.duration >= 100) console.warn(message);
+    else if (process.env.PERF_LOG_ALL === 'true') console.info(message);
+  });
+  return client;
+}
+
+const globalForPrisma = globalThis as unknown as { prisma?: ReturnType<typeof createPrismaClient> };
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;

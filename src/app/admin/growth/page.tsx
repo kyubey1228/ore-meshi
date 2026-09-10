@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getGrowthDashboard } from '@/server/growth-admin';
 import { getCompletionStats, getDemandDashboard, getNotificationAnalysis, getPhase3Overview, getRepeatStats, getSupplyDemandGap, getTimeToMatchStats } from '@/server/phase3-admin';
 import { getGrowthInsights } from '@/server/growth-insights';
+import { measurePerformance } from '@/lib/performance';
 
 export const metadata = { title: 'Growth Dashboard' };
 
@@ -14,7 +15,7 @@ function days(n: number | null) { return n === null ? 'データ不足' : `${n.t
 export default async function GrowthDashboard({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const { days: rawDays } = await searchParams;
   const days_ = PERIODS.includes(Number(rawDays)) ? Number(rawDays) : 30;
-  const [data, overview, completion, timeToMatch, repeat, notificationAnalysis, demand, supplyGap, insights] = await Promise.all([
+  const [data, overview, completion, timeToMatch, repeat, notificationAnalysis, demand, supplyGap, insights] = await measurePerformance('ADMIN', 'growth dashboard aggregates', () => Promise.all([
     getGrowthDashboard(days_),
     getPhase3Overview(days_),
     getCompletionStats(days_),
@@ -24,7 +25,7 @@ export default async function GrowthDashboard({ searchParams }: { searchParams: 
     getDemandDashboard(days_),
     getSupplyDemandGap(),
     getGrowthInsights(days_),
-  ]);
+  ]));
   const maxAreaCount = Math.max(1, ...data.topCompletedAreas.map(a => a.count));
   const timeToMatchChange = timeToMatch.medianTimeToMatchHours !== null && timeToMatch.previousMedianTimeToMatchHours
     ? Math.round(((timeToMatch.medianTimeToMatchHours - timeToMatch.previousMedianTimeToMatchHours) / timeToMatch.previousMedianTimeToMatchHours) * 100)

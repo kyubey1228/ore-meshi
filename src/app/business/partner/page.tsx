@@ -1,4 +1,5 @@
 import Link from 'next/link';
 import { getActivePartnerCampaigns } from '@/server/sales';
 export const metadata={title:'地域の先行パートナー募集',description:'飲食店向けの地域限定スポンサー企画・先行パートナー募集です。'};
+export const revalidate=300;
 export default async function Partner(){const campaigns=await getActivePartnerCampaigns();return <section className="section"><span className="eyebrow orange">EARLY PARTNER</span><h1>この街の飯を、一緒に増やす。</h1><p>地域ごとの立ち上げに参加する店舗・企業を募集しています。</p>{campaigns.length?<div className="sales-grid">{campaigns.map(c=><article className="panel" key={c.id}><span className="tag">{c.area}</span><h2>{c.title}</h2><p>{c.description}</p><strong>{c.offerText}</strong>{c.remaining!==null&&<p className="campaign-benefit">残り{c.remaining}店舗</p>}<Link className="btn wide" href={`/business/signup?partner=${c.id}`}>先行パートナーになる</Link></article>)}</div>:<div className="empty">現在募集中の先行パートナー枠はありません。</div>}<div className="hero-actions"><Link className="btn secondary" href="/business/contact">次回募集を相談する</Link><Link className="text-link" href="/business/pricing">料金を見る</Link></div></section>}

@@ -33,8 +33,19 @@ export async function getTopAreas(limit = 5) {
 }
 
 // 「今、人が集まりやすいエリア」= 単純な登録者数/募集数順ではなく、実際に成立した実績(completedMeals30d)を優先する。
-export async function getPopularAreas(limit = 5) {
-  const candidates = await getTopAreas(limit * 2);
-  const withStats = await Promise.all(candidates.map(async c => ({ area: c.area, ...(await getAreaStats(c.area)) })));
-  return withStats.filter(a => a.completedMeals30d > 0).sort((a, b) => b.completedMeals30d - a.completedMeals30d).slice(0, limit);
+async function computePopularAreas() {
+  const now = new Date();
+  const since30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const [mealCounts, activeCounts, completed] = await Promise.all([
+    prisma.meal.groupBy({ by: ['area'], where: { createdAt: { gte: since30 } }, _count: { _all: true } }),
+    prisma.meal.groupBy({ by: ['area'], where: { status: 'OPEN' }, _count: { _all: true } }),
+    prisma.match.findMany({ where: { status: 'COMPLETED', scheduledAt: { gte: since30 } }, select: { meal: { select: { area: true } } } }),
+  ]);
+  const totals = new Map(mealCounts.map(row => [row.area, row._count._all]));
+  const active = new Map(activeCounts.map(row => [row.area, row._count._all]));
+  const completedCounts = new Map<string, number>();
+  for (const row of completed) completedCounts.set(row.meal.area, (completedCounts.get(row.meal.area) ?? 0) + 1);
+  return [...completedCounts].map(([area, completedMeals30d]) => ({ area, completedMeals30d, activeMeals: active.get(area) ?? 0, participantsThisWeek: 0, fillRate: completedMeals30d / (totals.get(area) ?? completedMeals30d) })).sort((a, b) => b.completedMeals30d - a.completedMeals30d);
 }
+const getCachedPopularAreas = unstable_cache(computePopularAreas, ['popular-areas'], { revalidate: 300 });
+export async function getPopularAreas(limit = 5) { try{return (await getCachedPopularAreas()).slice(0, Math.min(Math.max(limit, 1), 20));}catch(error){console.error('Popular areas unavailable',error instanceof Error?error.name:'UnknownError');return[];} }

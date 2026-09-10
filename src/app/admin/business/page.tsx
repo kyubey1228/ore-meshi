@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getAreaGenreDashboard, getOpportunityRanking, getSalesSummary, MIN_BUSINESS_SAMPLE_SIZE } from '@/server/business-intelligence';
 import { getAcquisitionDashboard, getCampaignDashboard } from '@/server/acquisition';
+import { measurePerformance } from '@/lib/performance';
 
 export const metadata = { title: 'Business Dashboard' };
 
@@ -11,13 +12,13 @@ function percent(n: number) { return `${Math.round(n * 100)}%`; }
 export default async function BusinessDashboard({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const { days: rawDays } = await searchParams;
   const days = PERIODS.includes(Number(rawDays)) ? Number(rawDays) : 30;
-  const [areaGenre, opportunity, salesSummary, acquisition, campaigns] = await Promise.all([
+  const [areaGenre, opportunity, salesSummary, acquisition, campaigns] = await measurePerformance('ADMIN', 'business dashboard aggregates', () => Promise.all([
     getAreaGenreDashboard(days),
     getOpportunityRanking(days),
     getSalesSummary(days),
     getAcquisitionDashboard(days),
     getCampaignDashboard(days),
-  ]);
+  ]));
 
   return (
     <section className="section">

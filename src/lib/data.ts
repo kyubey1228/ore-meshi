@@ -40,11 +40,12 @@ function withinHours(meal: { candidates: { date: Date; startTime: string }[] }, 
   });
 }
 
-export async function getMealList(input: unknown = {}, context: RankingContext = {}) {
+export async function getMealList(input: unknown = {}, context: RankingContext = {}, limit = 100) {
   const parsed=filterSchema.safeParse(input); const filters=parsed.success?parsed.data:{};
   if(!process.env.DATABASE_URL) return [];
   const where: Prisma.MealWhereInput={status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}],...(filters.area?{area:{contains:filters.area,mode:'insensitive'}}:{}),...(filters.paymentType?{paymentType:filters.paymentType}:{}),...(typeof filters.budget==='number'?{budgetMax:{lte:filters.budget}}:{}),...(filters.date?{candidates:{some:{date:new Date(filters.date)}}}:{}),...(filters.purpose?{purposes:{some:{purpose:{slug:filters.purpose,isActive:true}}}}:{}),...whenWhere(filters.when)};
-  const meals=await prisma.meal.findMany({where,orderBy:{createdAt:'desc'},take:100,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
+  let meals;
+  try{meals=await prisma.meal.findMany({where,orderBy:{createdAt:'desc'},take:Math.min(Math.max(limit,1),100),include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});}catch(error){console.error('Meal list unavailable',error instanceof Error?error.name:'UnknownError');return[];}
   const now=new Date();
   const soonFiltered=filters.when==='soon'?meals.filter(meal=>withinHours(meal,3,now)):meals;
   const remainingFiltered=filters.remaining?soonFiltered.filter(meal=>meal.maxParticipants-(meal._count.joinRequests+1)===filters.remaining):soonFiltered;
@@ -106,8 +107,7 @@ export async function getMealById(raw: string){
   const meal=await prisma.meal.findUnique({where:{id:id.data},include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
   if(!meal)return null;
   // Applicants' messages are visible only to the host and the applicant.
-  const requests=userId?await prisma.joinRequest.findMany({where:{mealId:meal.id,...(meal.hostId===userId?{}:{userId})},include:{user:{select:publicUser},candidate:true},orderBy:{createdAt:'asc'}}):[];
-  const matches=userId?await prisma.match.findMany({where:{mealId:meal.id,participants:{some:{userId}}},select:{id:true,status:true,scheduledAt:true}}):[];
+  const [requests,matches]=userId?await Promise.all([prisma.joinRequest.findMany({where:{mealId:meal.id,...(meal.hostId===userId?{}:{userId})},include:{user:{select:publicUser},candidate:true},orderBy:{createdAt:'asc'}}),prisma.match.findMany({where:{mealId:meal.id,participants:{some:{userId}}},select:{id:true,status:true,scheduledAt:true}})]):[[],[]];
   return {...meal,joinRequests:requests,matches};
 }
 export async function getMealShareData(raw:string){

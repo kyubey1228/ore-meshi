@@ -637,6 +637,7 @@ model Notification {
 
   @@index([userId, createdAt])
   @@index([userId, readAt])
+  @@index([type, createdAt])
 }
 
 model NotificationPreference {
@@ -1016,6 +1017,8 @@ model Meal {
   @@index([hostId, createdAt])
   @@index([status, area, createdAt])
   @@index([area, genre, status])
+  @@index([createdAt, status])
+  @@index([matchedAt])
 }
 
 model DiningType {
@@ -1094,6 +1097,7 @@ model JoinRequest {
   @@unique([mealId, userId], map: "join_request_unique_per_user_per_meal")
   @@index([mealId, status])
   @@index([userId, status])
+  @@index([userId, createdAt])
 }
 
 model Match {
@@ -1115,6 +1119,8 @@ model Match {
 
   @@index([mealId, status])
   @@index([candidateId])
+  @@index([status, scheduledAt])
+  @@index([status, completedAt])
 }
 
 model MatchParticipant {

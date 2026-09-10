@@ -4,6 +4,7 @@ import type { NotificationCategory, NotificationType } from '@prisma/client';
 import { recordGrowthEvent } from '@/server/growth';
 import { sendEmail } from '@/server/email';
 import { appUrl } from '@/lib/social';
+import { measurePerformance } from '@/lib/performance';
 
 const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
   JOIN_REQUEST_RECEIVED: 'PARTICIPATION',
@@ -37,7 +38,7 @@ export type CreateNotificationInput = {
 
 // 冪等: 同じdedupeKeyでの再呼び出しは何もしない(cron等からの重複実行に安全)。
 // 通知作成の失敗はメインの業務処理を止めないよう、常にnullを返すだけで例外を投げない。
-export async function createNotification(params: CreateNotificationInput) {
+async function createNotificationInternal(params: CreateNotificationInput) {
   try {
     const category = CATEGORY_BY_TYPE[params.type];
     const [preference, user] = await Promise.all([
@@ -76,4 +77,8 @@ export async function createNotification(params: CreateNotificationInput) {
     console.error('createNotification failed (likely duplicate, safe to ignore)', error instanceof Error ? error.name : 'UnknownError');
     return null;
   }
+}
+
+export async function createNotification(params: CreateNotificationInput) {
+  return measurePerformance('NOTIFICATION', params.type, () => createNotificationInternal(params));
 }

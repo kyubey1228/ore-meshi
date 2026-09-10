@@ -1,6 +1,7 @@
 import 'server-only';
 import { unstable_cache } from 'next/cache';
 import { prisma } from '@/lib/prisma';
+import { measurePerformance } from '@/lib/performance';
 
 const MIN_SAMPLE = 5;
 const WINDOW_DAYS = 30;
@@ -36,7 +37,7 @@ function fillRateOf(rows: Row[]): { fillRate: number; sampleSize: number } {
 }
 
 export async function predictFillRate(params: { area: string; genre: string | null; weekday: number; hour: number }): Promise<PredictionResult> {
-  const rows = await getCachedAreaMeals(params.area);
+  const rows = await measurePerformance('MATCH_SCORE', 'predictFillRate dataset', () => getCachedAreaMeals(params.area));
   const timeOfDay: 'DAY' | 'NIGHT' = params.hour >= 17 ? 'NIGHT' : 'DAY';
 
   const exact = rows.filter(r => r.genre === params.genre && r.weekday === params.weekday && r.timeOfDay === timeOfDay);
@@ -55,7 +56,7 @@ export async function predictFillRate(params: { area: string; genre: string | nu
 
 // 「この曜日・時間帯の方が集まりやすい」という軽い提案。強制はしない。
 export async function suggestBetterTiming(params: { area: string; genre: string | null; weekday: number; hour: number }): Promise<string | null> {
-  const rows = await getCachedAreaMeals(params.area);
+  const rows = await measurePerformance('RECOMMENDATION', 'suggestBetterTiming dataset', () => getCachedAreaMeals(params.area));
   const byGenre = params.genre ? rows.filter(r => r.genre === params.genre) : rows;
   if (byGenre.length < MIN_SAMPLE * 2) return null;
   const buckets = new Map<string, { total: number; matched: number }>();

@@ -9,6 +9,8 @@ import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { recordGrowthEvent } from '@/server/growth';
 import { REFERRAL_COOKIE } from '@/server/referral-constants';
+import { cache } from 'react';
+import { measurePerformance } from '@/lib/performance';
 
 export const authConfigured = Boolean(
   process.env.AUTH_SECRET &&
@@ -105,12 +107,14 @@ export const authOptions: NextAuthOptions = {
   },
 };
 
-export async function currentUserId() {
+const getCurrentUserId = cache(async () => measurePerformance('AUTH', 'currentUserId', async () => {
   await connection();
   if (!authConfigured) return null;
   const session = await getServerSession(authOptions);
   return session?.user?.id ?? null;
-}
+}));
+
+export async function currentUserId() { return getCurrentUserId(); }
 
 export async function requirePageUser(next?: string) {
   const id = await currentUserId();
