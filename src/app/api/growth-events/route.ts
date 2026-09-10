@@ -26,15 +26,32 @@ const schema = z.object({
   utmTerm: z.string().trim().max(80).optional(),
 });
 
+const batchSchema = z.object({ events: z.array(schema).min(1).max(30) });
+
+function toRow(sessionKey: string, parsed: z.infer<typeof schema>) {
+  const { rankingPosition, recommendationReason, personalizationEnabled, experimentName, variant, notificationType, channel, utmContent, utmTerm, ...data } = parsed;
+  const metadataEntries = { rankingPosition, recommendationReason, personalizationEnabled, experimentName, variant, notificationType, channel, utmContent, utmTerm };
+  const hasMetadata = Object.values(metadataEntries).some(v => v !== undefined);
+  return { sessionKey, ...data, metadata: hasMetadata ? metadataEntries : undefined };
+}
+
+// 複数件のイベント(例: 一覧表示時のimpression計測)を1リクエスト・1 DB書き込みにまとめて送るための形。
+// クライアント側でカードの数だけfetchを乱発しないよう、必ずこの形を使うこと。
 export async function POST(request: Request) {
   try {
-    const { rankingPosition, recommendationReason, personalizationEnabled, experimentName, variant, notificationType, channel, utmContent, utmTerm, ...data } = schema.parse(await request.json());
-    const metadataEntries = { rankingPosition, recommendationReason, personalizationEnabled, experimentName, variant, notificationType, channel, utmContent, utmTerm };
-    const hasMetadata = Object.values(metadataEntries).some(v => v !== undefined);
+    const body = await request.json();
     const cookie = request.headers.get('cookie') ?? '';
     const existing = cookie.match(/(?:^|; )ore_growth_session=([^;]+)/)?.[1];
     const sessionKey = existing ? decodeURIComponent(existing) : randomUUID();
-    await prisma.growthEvent.create({ data: { sessionKey, ...data, metadata: hasMetadata ? metadataEntries : undefined } });
+
+    if (Array.isArray(body?.events)) {
+      const { events } = batchSchema.parse(body);
+      await prisma.growthEvent.createMany({ data: events.map(e => toRow(sessionKey, e)) });
+    } else {
+      const parsed = schema.parse(body);
+      await prisma.growthEvent.create({ data: toRow(sessionKey, parsed) });
+    }
+
     const response = NextResponse.json({ ok: true });
     response.cookies.set('ore_growth_session', sessionKey, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 90, path: '/' });
     return response;

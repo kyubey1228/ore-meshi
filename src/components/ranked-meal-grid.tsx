@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { MealCard } from '@/components/meal-card';
 import type { getMealList } from '@/lib/data';
-import { trackGrowthEvent } from '@/components/growth-tracker';
+import { trackGrowthEvent, trackGrowthEventsBatch } from '@/components/growth-tracker';
 
 type Meal = Awaited<ReturnType<typeof getMealList>>[number];
 type Item = { meal: Meal; reason: string };
@@ -12,9 +12,11 @@ export function RankedMealGrid({ items, personalizationEnabled }: { items: Item[
   useEffect(() => {
     if (tracked.current) return;
     tracked.current = true;
-    items.slice(0, 20).forEach((item, index) => {
-      trackGrowthEvent('RECOMMENDATION_IMPRESSION', { recruitmentId: item.meal.id, rankingPosition: index, recommendationReason: item.reason, personalizationEnabled });
-    });
+    // カードの数だけ個別fetchを発行するとブラウザの同時接続を圧迫し体感速度を落とすため、1リクエストにまとめる。
+    trackGrowthEventsBatch(items.slice(0, 20).map((item, index) => ({
+      eventType: 'RECOMMENDATION_IMPRESSION' as const,
+      payload: { recruitmentId: item.meal.id, rankingPosition: index, recommendationReason: item.reason, personalizationEnabled },
+    })));
   }, [items, personalizationEnabled]);
 
   function onClickCapture(item: Item, index: number) {

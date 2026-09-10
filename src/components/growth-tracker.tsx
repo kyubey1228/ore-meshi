@@ -48,6 +48,28 @@ export function trackGrowthEvent(eventType: GrowthEvent, payload: GrowthEventPay
   }).catch(() => {});
 }
 
+// 一覧表示時のimpression計測など、同時に複数件のイベントを送る場合はカードの数だけfetchを発行せず、
+// 必ずこちらで1リクエストにまとめる(ブラウザの同時接続数を圧迫し、他の読み込みを遅くするため)。
+export function trackGrowthEventsBatch(events: { eventType: GrowthEvent; payload?: GrowthEventPayload }[]) {
+  if (events.length === 0) return;
+  const utm = getUtmParams();
+  const referrer = typeof document !== 'undefined' ? document.referrer || undefined : undefined;
+  void fetch('/api/growth-events', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      events: events.map(({ eventType, payload = {} }) => ({
+        eventType,
+        source: payload.source ?? utm.source,
+        utmMedium: payload.utmMedium ?? utm.utmMedium,
+        utmCampaign: payload.utmCampaign ?? utm.utmCampaign,
+        referrer: payload.referrer ?? referrer,
+        ...payload,
+      })),
+    }),
+  }).catch(() => {});
+}
+
 export function GrowthTracker({ eventType, ...payload }: { eventType: GrowthEvent } & GrowthEventPayload) {
   useEffect(() => {
     trackGrowthEvent(eventType, payload);

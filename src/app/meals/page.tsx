@@ -34,12 +34,17 @@ export default async function Meals({searchParams}:{searchParams:Promise<Record<
   const parsed=filterSchema.safeParse(raw);
   const filters=parsed.success?parsed.data:{};
   const userId=await currentUserId();
-  const [preferences,recommendationProfile]=await Promise.all([
+  // preferences/recommendationProfileはgetMealListのランキングに必要だが、purposes/sponsoredMeals/seatCampaignsは
+  // それらと無関係なので同じ待ち行列に入れて1段目から並行取得する(以前は2段階のwaterfallになっていた)。
+  const [preferences,recommendationProfile,purposes,sponsoredMeals,seatCampaigns]=await Promise.all([
     userId?getUserPreferences(userId):Promise.resolve(null),
     userId?getRecommendationTopPicks(userId):Promise.resolve(null),
+    getMealPurposes(),
+    getActiveStandaloneSponsoredMeals(filters.area),
+    getActiveSeatCampaigns(filters.area),
   ]);
   const context={preferredArea:preferences?.preferredArea,preferredGenres:preferences?.preferredGenres,recommendationProfile};
-  const [meals,purposes,sponsoredMeals,seatCampaigns]=await Promise.all([getMealList(filters,context),getMealPurposes(),getActiveStandaloneSponsoredMeals(filters.area),getActiveSeatCampaigns(filters.area)]);
+  const meals=await getMealList(filters,context);
   const recentMeals=meals.length?[]:await getRecentOpenMeals(4);
   const createHref=userId?'/meals/new':`/login?next=${encodeURIComponent('/meals/new')}`;
   const personalizationEnabled=Boolean(preferences?.preferredArea||preferences?.preferredGenres.length);

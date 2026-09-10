@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getFavoriteMealIds, getMealsByIds, getMyPageData, getReferralStats } from '@/lib/data';
 import { getOrCreateReferralCode } from '@/server/referral';
+import { currentUserId } from '@/server/auth';
 import { appUrl } from '@/lib/social';
 import { dateTimeLabel, mealStatusLabels, matchStatusLabels, paymentLabels, requestStatusLabels } from '@/lib/format';
 import { LogoutButton } from '@/components/auth-buttons';
@@ -10,11 +11,20 @@ import { ReferralShare } from '@/components/referral-share';
 
 export const metadata = { title: 'マイページ' };
 export default async function MyPage() {
-  const data = await getMyPageData();
+  // userIdはセッションから即座に分かる(currentUserIdはリクエスト単位でキャッシュされ重複コストなし)ため、
+  // getMyPageData()の重いクエリ群を待たずに、お気に入り/紹介コード/紹介実績の取得も同時に始める
+  // (以前はgetMyPageData()完了→お気に入り取得開始、という2段階のwaterfallになっていた)。
+  const userId = await currentUserId();
+  if (!userId) redirect('/login?next=%2Fmypage');
+  const [data, favoriteIds, referralCode, referralStats] = await Promise.all([
+    getMyPageData(),
+    getFavoriteMealIds(userId),
+    getOrCreateReferralCode(userId),
+    getReferralStats(userId),
+  ]);
   if (!data.onboardingCompletedAt) redirect('/onboarding');
   const upcoming = data.matches.filter(m => m.status === 'ACTIVE');
   const lastHostedMeal = data.hostedMeals[0] ?? null;
-  const [favoriteIds, referralCode, referralStats] = await Promise.all([getFavoriteMealIds(data.userId), getOrCreateReferralCode(data.userId), getReferralStats(data.userId)]);
   const favoriteMeals = favoriteIds.length ? await getMealsByIds(favoriteIds) : [];
 
   return <section className="section"><div className="section-heading"><div><span className="eyebrow orange">MY TABLE</span><h1>マイページ</h1></div><div className="row">{data.businessMembership&&<Link className="text-link" href="/business/dashboard">{data.businessMembership.businessAccount.name}の店舗管理</Link>}{data.isAdmin&&<Link className="btn secondary small" href="/admin/leads">管理者ダッシュボード</Link>}<Link className="text-link" href="/profile">プロフィール編集</Link><LogoutButton /></div></div>
