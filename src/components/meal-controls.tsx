@@ -6,8 +6,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { createJoinRequest, cancelJoinRequest, decideJoinRequest } from '@/server/actions/join-requests';
 import { setMealStatus } from '@/server/actions/meals';
 import type { ActionResult } from '@/server/action';
+import { trackGrowthEvent } from '@/components/growth-tracker';
 
-export function JoinForm({mealId,candidates}:{mealId:string;candidates:{id:string;label:string}[]}){return <ActionForm label="この飯に行く" action={data=>createJoinRequest({mealId,candidateId:data.get('candidateId'),message:data.get('message')})}><label>行ける日時<select name="candidateId" required>{candidates.map(candidate=><option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}</select></label><label>ひとこと（任意）<textarea name="message" maxLength={500} placeholder="はじめまして！ 一緒に行きたいです。"/></label></ActionForm>;}
+export function JoinForm({mealId,area,genre,candidates}:{mealId:string;area:string;genre:string|null;candidates:{id:string;label:string}[]}){
+  const payload={recruitmentId:mealId,area,foodCategory:genre??undefined,loggedIn:true};
+  return <ActionForm label="この募集に参加する" action={data=>{trackGrowthEvent('RECRUITMENT_JOIN_CLICKED',payload);return createJoinRequest({mealId,candidateId:data.get('candidateId'),message:data.get('message')}).then(result=>{if(result.ok)trackGrowthEvent('RECRUITMENT_JOIN_COMPLETED',payload);return result;});}}><label>行ける日時<select name="candidateId" required>{candidates.map(candidate=><option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}</select></label><label>ひとこと（任意）<textarea name="message" maxLength={500} placeholder="はじめまして！ 一緒に行きたいです。"/></label></ActionForm>;}
 
 export function RequestDecision({id,mealId}:{id:string;mealId:string}){
   const [pending,start]=useTransition();const [result,setResult]=useState<ActionResult>();const router=useRouter();
