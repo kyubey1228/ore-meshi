@@ -1,12 +1,10 @@
 'use client';
 import { useState } from 'react';
-import { AreaDatalist } from '@/components/area-datalist';
 
 type Grouped = { prefecture: string; cities: string[] }[];
 
-// 「どこ」検索欄。自由入力(datalist補完)はそのまま残しつつ、都道府県タブ→市区町村一覧の
-// ピッカーでも選べるようにする(丁目・商店街名などの自由記述を妨げないため、選択後も編集可能)。
-export function AreaSearchField({ defaultValue = '', grouped, areaOptions }: { defaultValue?: string; grouped: Grouped; areaOptions: string[] }) {
+// 「どこ」検索欄。都道府県タブ→市区町村一覧のピッカーのみで選ぶ(自由入力欄は無し)。
+export function AreaSearchField({ defaultValue = '', grouped }: { defaultValue?: string; grouped: Grouped }) {
   const [value, setValue] = useState(defaultValue);
   const [open, setOpen] = useState(false);
   const [activePrefecture, setActivePrefecture] = useState(grouped[0]?.prefecture ?? '');
@@ -15,12 +13,11 @@ export function AreaSearchField({ defaultValue = '', grouped, areaOptions }: { d
   return (
     <div className="area-search-field">
       <label>どこ
-        <div className="area-input-row">
-          <input name="area" list="area-options" placeholder="例：新宿" maxLength={80} value={value} onChange={e => setValue(e.target.value)} />
-          <button type="button" className="btn secondary small" aria-expanded={open} onClick={() => setOpen(o => !o)}>都道府県から選ぶ</button>
-        </div>
+        <button type="button" className={`area-picker-trigger${value ? ' selected' : ''}`} aria-expanded={open} onClick={() => setOpen(o => !o)}>
+          {value || 'エリアを選ぶ'}
+        </button>
       </label>
-      <AreaDatalist options={areaOptions} />
+      <input type="hidden" name="area" value={value} />
       {open && (
         <div className="area-picker">
           <div className="area-picker-tabs">
@@ -29,6 +26,7 @@ export function AreaSearchField({ defaultValue = '', grouped, areaOptions }: { d
             ))}
           </div>
           <div className="area-picker-cities">
+            {value && <button type="button" className="chip" onClick={() => { setValue(''); setOpen(false); }}>クリア</button>}
             {activeCities.map(city => (
               <button key={city} type="button" className="chip" onClick={() => { setValue(city); setOpen(false); }}>{city}</button>
             ))}
