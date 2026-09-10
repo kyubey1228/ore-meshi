@@ -1,12 +1,17 @@
 'use client';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { Copy, Share2 } from 'lucide-react';
 import { trackGrowthEvent } from '@/components/growth-tracker';
+
+function subscribeNever() { return () => {}; }
+function getWebShareSupport() { return typeof navigator !== 'undefined' && typeof navigator.share === 'function'; }
 
 type Props = { mealId: string; area: string; genre: string | null; text: string; url: string };
 
 export function MealShareActions({ mealId, area, genre, text, url }: Props) {
   const [copied, setCopied] = useState(false);
+  // navigator.shareの有無はSSR/CSRで結果が異なりうるため、useSyncExternalStoreでサーバーは常にfalseとしハイドレーション不一致を避ける。
+  const canWebShare = useSyncExternalStore(subscribeNever, getWebShareSupport, () => false);
   const payload = { recruitmentId: mealId, area, foodCategory: genre ?? undefined };
 
   function share(shareType: 'x' | 'line' | 'url_copy' | 'web_share') {
@@ -48,7 +53,7 @@ export function MealShareActions({ mealId, area, genre, text, url }: Props) {
       <button className="btn secondary" type="button" onClick={copyUrl}>
         <Copy size={17} />{copied ? 'コピーしました！' : 'URLをコピー'}
       </button>
-      {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+      {canWebShare && (
         <button className="btn secondary" type="button" onClick={webShare}>共有する</button>
       )}
     </div>
