@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/server/notifications';
 import { recordGrowthEvent } from '@/server/growth';
 import { measurePerformance } from '@/lib/performance';
+import { shouldAutoCloseMeal } from '@/lib/meal-expiration';
 
 const MAX_BATCH = 200;
 const CONCURRENCY = 5;
@@ -11,20 +12,6 @@ function jstEndOfTodayUTC(now: Date): Date {
   const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
   const parts = Object.fromEntries(fmt.formatToParts(now).map(p => [p.type, p.value]));
   return new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), 14, 59, 59, 999));
-}
-
-function jstStartOfTodayUTC(now: Date): Date {
-  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
-  const parts = Object.fromEntries(fmt.formatToParts(now).map(p => [p.type, p.value]));
-  return new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), -9, 0, 0, 0));
-}
-
-// candidate.dateはJSTの暦日をUTC正午基準で保持しているため、Intlで一度JSTの年月日に戻してから
-// startTime(HH:MM, JST)と組み合わせて実際の開始時刻(UTC instant)を復元する。
-function candidateStartInstant(candidate: { date: Date; startTime: string }): Date {
-  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
-  const parts = Object.fromEntries(fmt.formatToParts(candidate.date).map(p => [p.type, p.value]));
-  return new Date(`${parts.year}-${parts.month}-${parts.day}T${candidate.startTime}:00+09:00`);
 }
 
 async function chunks<T>(items: T[], operation: (item: T) => Promise<number>) {
@@ -54,21 +41,24 @@ export async function GET(request: Request) {
     const in2h = new Date(now.getTime() + 2 * 60 * 60 * 1000);
     const in2hAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    // 開始時刻ちょうどでは閉じないよう猶予を持たせる(開催中の可能性がある)。
-    const candidateBufferMs = 6 * 60 * 60 * 1000;
-
     const [deadlineSoon, todayMatches, soonMatches, awaitingCompletion, expired, staleCandidates] = await Promise.all([
       prisma.meal.findMany({ where: { ...cursorWhere(mealCursor), status: 'OPEN', deadline: { gt: now, lte: in24h } }, select: { id: true, title: true, hostId: true }, orderBy: { id: 'asc' }, take: limit }),
       prisma.match.findMany({ where: { ...cursorWhere(matchCursor), status: 'ACTIVE', scheduledAt: { gte: now, lte: jstEndOfTodayUTC(now) } }, select: { id: true, mealId: true, meal: { select: { title: true } }, participants: { select: { userId: true } } }, orderBy: { id: 'asc' }, take: limit }),
       prisma.match.findMany({ where: { ...cursorWhere(matchCursor), status: 'ACTIVE', scheduledAt: { gt: now, lte: in2h } }, select: { id: true, mealId: true, meal: { select: { title: true } }, participants: { select: { userId: true } } }, orderBy: { id: 'asc' }, take: limit }),
       prisma.match.findMany({ where: { ...cursorWhere(completionCursor), status: 'ACTIVE', scheduledAt: { lte: in2hAgo, gte: sevenDaysAgo } }, select: { id: true, mealId: true, meal: { select: { title: true, area: true } }, participants: { select: { userId: true } } }, orderBy: { id: 'asc' }, take: limit }),
       prisma.demandIntent.updateMany({ where: { status: 'ACTIVE', expiresAt: { lt: now } }, data: { status: 'EXPIRED' } }),
-      // 「全候補日が今日より前」のOPEN Mealだけをまずgross(日単位)にDBで絞り込み、
+      // 「全候補日が今日以前」のOPEN Mealだけをまず日単位でDBで絞り込み、
       // 開始時刻を使った正確な判定はJS側で行う(候補ごとのstartTimeを跨いだ比較はDBクエリだけでは表現できないため)。
-      prisma.meal.findMany({ where: { ...cursorWhere(staleCursor), status: 'OPEN', candidates: { every: { date: { lt: jstStartOfTodayUTC(now) } }, some: {} } }, select: { id: true, title: true, hostId: true, candidates: { select: { date: true, startTime: true } } }, orderBy: { id: 'asc' }, take: limit }),
+      prisma.meal.findMany({ where: { ...cursorWhere(staleCursor), status: 'OPEN', candidates: { every: { date: { lte: jstEndOfTodayUTC(now) } }, some: {} } }, select: { id: true, title: true, hostId: true, candidates: { select: { date: true, startTime: true } } }, orderBy: { id: 'asc' }, take: limit }),
     ]);
-    const toClose = staleCandidates.filter(meal => meal.candidates.every(c => candidateStartInstant(c).getTime() + candidateBufferMs < now.getTime()));
-    if (toClose.length) await prisma.meal.updateMany({ where: { id: { in: toClose.map(m => m.id) } }, data: { status: 'CLOSED' } });
+    const toClose = staleCandidates.filter(meal => shouldAutoCloseMeal(meal.candidates, now));
+    if (toClose.length) {
+      const ids = toClose.map(meal => meal.id);
+      await prisma.$transaction([
+        prisma.meal.updateMany({ where: { id: { in: ids }, status: 'OPEN' }, data: { status: 'CLOSED' } }),
+        prisma.joinRequest.updateMany({ where: { mealId: { in: ids }, status: 'PENDING' }, data: { status: 'REJECTED' } }),
+      ]);
+    }
 
     let sent = await chunks(deadlineSoon, async meal => Number(Boolean(await createNotification({ userId: meal.hostId, type: 'DEADLINE_SOON', title: '締切が近づいています', body: `「${meal.title}」の募集締切がまもなくです。`, mealId: meal.id, dedupeKey: `DEADLINE_SOON:${meal.id}` }))));
     const todayJobs = todayMatches.flatMap(match => match.participants.map(participant => ({ match, userId: participant.userId })));

@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { ensure, perform, transaction } from '@/server/action';
 import { recordGrowthEvent } from '@/server/growth';
-import { idSchema } from '@/validators';
+import { idSchema, scheduledAt } from '@/validators';
 
 const INTENT_COOKIE = 'ore_join_intent';
 const INTENT_TTL_MS = 30 * 60 * 1000;
@@ -70,6 +70,9 @@ export async function confirmJoinIntent(input: unknown) {
     ensure(intent.status !== 'COMPLETED', 'すでに参加済みです。');
     ensure(intent.expiresAt > new Date(), 'この参加リクエストの有効期限が切れています。もう一度参加ボタンを押してください。');
     await transaction(async tx => {
+      const candidate = await tx.mealCandidate.findUnique({ where: { id: data.candidateId }, include: { meal: { select: { status: true } } } });
+      ensure(candidate?.mealId === intent.mealId && candidate.meal.status === 'OPEN', 'その飯はもう募集が終わっています。');
+      ensure(scheduledAt(candidate.date.toISOString().slice(0, 10), candidate.startTime) > new Date(), 'この候補日時は過ぎています。');
       await tx.joinRequest.create({ data: { mealId: intent.mealId, userId, candidateId: data.candidateId, message: data.message || null } });
       await tx.joinIntent.update({ where: { id: intent.id }, data: { status: 'COMPLETED', userId, consumedAt: new Date() } });
     });
