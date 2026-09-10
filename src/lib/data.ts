@@ -8,6 +8,18 @@ export const publicUser = { id:true, twitterUsername:true, displayName:true, ima
 export async function getCurrentUser(){const id=await currentUserId();return id?prisma.user.findUnique({where:{id},select:publicUser}):null;}
 export async function getDiningTypes(){return prisma.diningType.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{label:'asc'}],select:{id:true,slug:true,label:true}});}
 export async function getMealPurposes(){return prisma.mealPurpose.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{label:'asc'}],select:{id:true,slug:true,label:true}});}
+export async function getNotifications(limit=30){
+  const userId=await requirePageUser();
+  return prisma.notification.findMany({where:{userId},orderBy:{createdAt:'desc'},take:limit});
+}
+export async function getUnreadNotificationCount(){
+  const userId=await currentUserId();if(!userId)return 0;
+  return prisma.notification.count({where:{userId,readAt:null}});
+}
+export async function getNotificationPreference(userId:string){
+  const pref=await prisma.notificationPreference.findUnique({where:{userId}});
+  return pref??{recruitmentEnabled:true,participationEnabled:true,recommendationEnabled:true};
+}
 function whenWhere(when: string | undefined): Prisma.MealWhereInput {
   if (!when) return {};
   const now = new Date();
@@ -53,6 +65,27 @@ export async function getMealsByIds(ids: string[]){
 export async function getUserPreferences(userId: string){
   const user=await prisma.user.findUnique({where:{id:userId},select:{preferredArea:true,preferredGenres:true}});
   return {preferredArea:user?.preferredArea??null,preferredGenres:user?.preferredGenres??[]};
+}
+const WEEKDAY_LABEL_JA=['日','月','火','水','木','金','土'];
+export async function getFrequentPostingPattern(userId: string){
+  const meals=await prisma.meal.findMany({where:{hostId:userId},orderBy:{createdAt:'desc'},take:20,include:{candidates:{orderBy:{date:'asc'},take:1}}});
+  const buckets=new Map<string,number>();
+  for(const meal of meals){
+    const c=meal.candidates[0];if(!c)continue;
+    const key=`${c.date.getUTCDay()}:${c.startTime.slice(0,2)}`;
+    buckets.set(key,(buckets.get(key)??0)+1);
+  }
+  const top=[...buckets.entries()].sort((a,b)=>b[1]-a[1])[0];
+  if(!top||top[1]<2)return null;
+  const [dowStr,hourStr]=top[0].split(':');
+  return {label:`${WEEKDAY_LABEL_JA[Number(dowStr)]}曜${hourStr}時頃`,weekday:Number(dowStr),hour:Number(hourStr)};
+}
+export async function getReferralStats(userId: string){
+  const [invitedCount,activatedCount]=await Promise.all([
+    prisma.referral.count({where:{referrerUserId:userId,referredUserId:{not:null}}}),
+    prisma.referral.count({where:{referrerUserId:userId,activatedAt:{not:null}}}),
+  ]);
+  return {invitedCount,activatedCount};
 }
 export async function getHostTrustStats(hostId: string){
   if(!process.env.DATABASE_URL) return {hostedCount:0,completedCount:0};
