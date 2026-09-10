@@ -4,6 +4,7 @@ import { currentUserId } from '@/server/auth';
 import { filterSchema } from '@/validators';
 import { paymentLabels } from '@/lib/format';
 import { rankMeals } from '@/lib/meal-ranking';
+import { getRecommendationTopPicks } from '@/server/recommendation-profile';
 import { MealCard } from '@/components/meal-card';
 import { SponsoredMealBanner } from '@/components/sponsored-meal-banner';
 import { SeatCampaignBanner } from '@/components/seat-campaign-banner';
@@ -33,8 +34,11 @@ export default async function Meals({searchParams}:{searchParams:Promise<Record<
   const parsed=filterSchema.safeParse(raw);
   const filters=parsed.success?parsed.data:{};
   const userId=await currentUserId();
-  const preferences=userId?await getUserPreferences(userId):null;
-  const context={preferredArea:preferences?.preferredArea,preferredGenres:preferences?.preferredGenres};
+  const [preferences,recommendationProfile]=await Promise.all([
+    userId?getUserPreferences(userId):Promise.resolve(null),
+    userId?getRecommendationTopPicks(userId):Promise.resolve(null),
+  ]);
+  const context={preferredArea:preferences?.preferredArea,preferredGenres:preferences?.preferredGenres,recommendationProfile};
   const [meals,purposes,sponsoredMeals,seatCampaigns]=await Promise.all([getMealList(filters,context),getMealPurposes(),getActiveStandaloneSponsoredMeals(filters.area),getActiveSeatCampaigns(filters.area)]);
   const recentMeals=meals.length?[]:await getRecentOpenMeals(4);
   const createHref=userId?'/meals/new':`/login?next=${encodeURIComponent('/meals/new')}`;
@@ -44,7 +48,7 @@ export default async function Meals({searchParams}:{searchParams:Promise<Record<
   return <section className="section">
     <div className="section-heading">
       <div><span className="eyebrow orange">FIND YOUR NEXT MEAL</span><h1>誰かの飯に乗っかる。</h1><p className="muted">今日の「うまい」を、一緒に。</p></div>
-      <TrackedLink className="btn secondary" eventType="RECRUITMENT_CREATE_CLICKED" payload={{area:filters.area,loggedIn:Boolean(userId)}} href={createHref}>飯相手を募集する</TrackedLink>
+      <div className="row wrap"><Link className="text-link" href="/demand">募集が無くても行きたい登録する →</Link><TrackedLink className="btn secondary" eventType="RECRUITMENT_CREATE_CLICKED" payload={{area:filters.area,loggedIn:Boolean(userId)}} href={createHref}>飯相手を募集する</TrackedLink></div>
     </div>
     {!userId&&<GrowthTracker eventType="SIGNUP_CTA_VIEW" source="meals_list_create_cta" loggedIn={false}/>}
     <GrowthTracker eventType="QUICK_FILTER_VIEW" loggedIn={Boolean(userId)}/>

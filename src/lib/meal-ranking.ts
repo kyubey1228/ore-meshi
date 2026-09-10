@@ -12,6 +12,7 @@ export type RankableMeal = {
 export type RankingContext = {
   preferredArea?: string | null;
   preferredGenres?: string[];
+  recommendationProfile?: { genres: string[]; areas: string[] } | null;
   now?: Date;
 };
 
@@ -44,8 +45,12 @@ export function scoreMeal<T extends RankableMeal>(meal: T, context: RankingConte
   const upcomingBonus = hoursUntil !== null && hoursUntil > 0 ? Math.max(0, 40 - hoursUntil / 2) : 0;
   const hostTrustBonus = hostQualityBonus(meal.host, now);
   const recencyBonus = Math.max(0, 10 - (now.getTime() - meal.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+  // DiningFeedbackから導出した「好みそうな体験」の軽い加点(最大10)。他人の評価は一切影響しない自分専用の重み。
+  const feedbackBonus =
+    (context.recommendationProfile?.areas.some(a => a.toLowerCase() === meal.area.toLowerCase()) ? 5 : 0) +
+    (meal.genre && context.recommendationProfile?.genres.some(g => g.toLowerCase() === meal.genre?.toLowerCase()) ? 5 : 0);
 
-  const score = areaMatch + genreMatch + participantCount + lastSlotBonus + upcomingBonus + hostTrustBonus + recencyBonus;
+  const score = areaMatch + genreMatch + participantCount + lastSlotBonus + upcomingBonus + hostTrustBonus + recencyBonus + feedbackBonus;
 
   const reason: RankedMeal['reason'] =
     lastSlotBonus >= 50 ? 'LAST_SLOT'
