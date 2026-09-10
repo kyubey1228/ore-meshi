@@ -17,6 +17,9 @@ export async function currentBusinessMembership(){
   const userId=await currentUserId();if(!userId)return null;
   return prisma.businessMember.findFirst({where:{userId,OR:[{role:{in:['OWNER','ADMIN']}},{canPostToSocial:true}]},include:{businessAccount:true},orderBy:{createdAt:'asc'}});
 }
+export async function getBusinessTeam(businessAccountId:string){
+  return prisma.businessMember.findMany({where:{businessAccountId},orderBy:{createdAt:'asc'},include:{user:{select:{displayName:true,twitterUsername:true,image:true}}}});
+}
 export async function getBusinessDashboard(){
   const membership=await businessPostingMembership();const id=membership.businessAccountId;const now=new Date();
   const [sponsoredMeals,sponsorCampaigns,seatCampaigns,coupons,directAds,socialAccounts,settings,recentPosts,analytics]=await Promise.all([
