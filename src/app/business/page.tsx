@@ -28,9 +28,10 @@ export default async function BusinessLanding() {
   return <div className="business-lp">
     <BusinessMarketingTracker eventType="BUSINESS_LP_VIEW" />
     <section className="business-hero">
+      <span className="business-hero-circle" aria-hidden="true"><span>💺</span></span>
       <span className="eyebrow orange">俺メシ FOR BUSINESS</span><h1>空席を、<br />今夜の客に。</h1>
       <p>スポンサー飯・空席スポンサーを使って、店舗の空席やキャンペーンを実際の“飯の予定”に変えます。</p>
-      <div className="hero-actions"><BusinessMarketingLink className="btn" href={signupHref} eventType="BUSINESS_SIGNUP_CTA_CLICK" placement="HERO">{membership ? '店舗管理へ' : '店舗・企業登録'}<ArrowRight size={18} /></BusinessMarketingLink><BusinessMarketingLink className="btn secondary" href="/business/pricing" eventType="PRICING_CTA_CLICK" placement="HERO">料金を見る</BusinessMarketingLink><BusinessMarketingLink className="text-link" href="/business/contact" eventType="CONTACT_CTA_CLICK" placement="HERO">まず相談する</BusinessMarketingLink></div>
+      <div className="hero-actions"><BusinessMarketingLink className="btn" href={signupHref} eventType="BUSINESS_SIGNUP_CTA_CLICK" placement="HERO">{membership ? '店舗管理へ' : '店舗・企業登録'}<ArrowRight size={18} /></BusinessMarketingLink><BusinessMarketingLink className="btn secondary" href="/business/pricing" eventType="PRICING_CTA_CLICK" placement="HERO">料金を見る</BusinessMarketingLink><BusinessMarketingLink className="btn ghost" href="/business/contact" eventType="CONTACT_CTA_CLICK" placement="HERO">まず相談する</BusinessMarketingLink></div>
     </section>
 
     {partners.length > 0 && <section className="partner-strip"><strong>{partners[0].area}エリア 先行店舗募集中</strong><span>{partners[0].remaining === null ? '募集枠あり' : `残り${partners[0].remaining}店舗`}</span><BusinessMarketingLink href="/business/partner" eventType="PARTNER_CTA_CLICK" placement="LP_TOP">パートナー募集を見る →</BusinessMarketingLink></section>}
@@ -56,7 +57,7 @@ export default async function BusinessLanding() {
     <section className="section contact-prompt"><h2>何を使えばいいかわからなければ、まず相談してください。</h2><p>空席対策、販促、スポンサー企画から合う方法を一緒に整理します。</p><div className="hero-actions"><BusinessMarketingLink className="btn" href="/business/contact" eventType="CONTACT_CTA_CLICK" placement="BEFORE_FAQ">相談する</BusinessMarketingLink><Link className="text-link" href="/business/faq">よくある質問を見る →</Link></div></section>
 
     <section className="partner-cta"><span>🤝</span><div><h2>スポンサー企業・飲食店募集中</h2><p>俺メシと一緒に、新しい飯の集まり方を作りませんか？</p></div><BusinessMarketingLink className="btn secondary" href="/business/partner" eventType="PARTNER_CTA_CLICK" placement="LP_BOTTOM">パートナー募集を見る</BusinessMarketingLink></section>
-    <section className="invitation"><span>🍚</span><div><h2>今日の空席から、始めませんか？</h2><p>登録後に内容を確認します。商品が決まっていなくても相談できます。</p></div><BusinessMarketingLink className="btn" href={signupHref} eventType="BUSINESS_SIGNUP_CTA_CLICK" placement="LP_BOTTOM">{membership ? '店舗管理へ' : '店舗・企業登録'}</BusinessMarketingLink><BusinessMarketingLink className="text-link" href="/business/contact" eventType="CONTACT_CTA_CLICK" placement="LP_BOTTOM">まず相談する</BusinessMarketingLink></section>
+    <section className="invitation"><span>🍚</span><div><h2>今日の空席から、始めませんか？</h2><p>登録後に内容を確認します。商品が決まっていなくても相談できます。</p></div><BusinessMarketingLink className="btn" href={signupHref} eventType="BUSINESS_SIGNUP_CTA_CLICK" placement="LP_BOTTOM">{membership ? '店舗管理へ' : '店舗・企業登録'}</BusinessMarketingLink><BusinessMarketingLink className="btn ghost" href="/business/contact" eventType="CONTACT_CTA_CLICK" placement="LP_BOTTOM">まず相談する</BusinessMarketingLink></section>
     {!membership && <BusinessMarketingLink className="business-sticky-cta" href="/business/signup" eventType="BUSINESS_SIGNUP_CTA_CLICK" placement="MOBILE_STICKY">店舗・企業登録</BusinessMarketingLink>}
   </div>;
 }
