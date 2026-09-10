@@ -38,6 +38,7 @@ export default async function SponsoredMealsList() {
             {item.benefit && <p>{item.benefit}</p>}
             <p className="muted">掲載料 ¥{priceYen}</p>
             {item.status === 'DRAFT' && <BusinessCheckoutButton kind="SPONSORED_MEAL" sponsoredMealId={item.id} label={`${priceYen}円で支払って公開する`} />}
+            {item.status !== 'DRAFT' && <Link className="btn secondary" href={`/business/sponsored-meals/${item.id}`}>成果を見る</Link>}
             {item.status === 'ACTIVE' && <Link className="btn secondary" href={`/business/social?kind=SPONSORED_MEAL&id=${item.id}`}>Xで宣伝する</Link>}
           </article>
         ))}
