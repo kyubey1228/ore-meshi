@@ -1,6 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -10,6 +10,7 @@ import { TagSelector, type SelectableTag } from '@/components/tag-selector';
 import { createMeal, updateMeal } from '@/server/actions/meals';
 import { mealSchema } from '@/validators';
 import { paymentLabels, candidateLabel } from '@/lib/format';
+import { MealDraftPreview } from '@/components/meal-draft-preview';
 import type { z } from 'zod';
 
 type Fields={title:string;area:string;budgetMin:number;budgetMax:number;maxParticipants:number;paymentType:'SPLIT'|'HOST_PAYS'|'GUEST_PAYS';restaurant:string;description:string;genre:string;alcohol:string;smoking:string;ageCondition:string;deadline:string;purposeIds:string[]};
@@ -18,7 +19,7 @@ type CreatedMeal={href:string;title:string;area:string;when:string;budget:string
 const presets=[{name:'朝',start:'06:00',end:'10:00'},{name:'昼',start:'11:00',end:'14:00'},{name:'夕方',start:'15:00',end:'18:00'},{name:'夜',start:'18:00',end:'22:00'},{name:'深夜',start:'22:00',end:'02:00'}];
 
 export function MealForm({initial,id,purposes}:{initial?:Fields & {candidates:Candidate[]};id?:string;purposes:SelectableTag[]}){
-  const {register,handleSubmit}=useForm<Fields>({defaultValues:initial??{budgetMin:1000,budgetMax:3000,maxParticipants:2,paymentType:'SPLIT'}});
+  const {register,handleSubmit,control}=useForm<Fields>({defaultValues:initial??{title:'',area:'',budgetMin:1000,budgetMax:3000,maxParticipants:2,paymentType:'SPLIT',restaurant:'',description:'',genre:'',alcohol:'',smoking:'',ageCondition:'',deadline:'',purposeIds:[]}});
   const [date,setDate]=useState<Date>();
   const [start,setStart]=useState('18:00');
   const [end,setEnd]=useState('22:00');
@@ -28,6 +29,7 @@ export function MealForm({initial,id,purposes}:{initial?:Fields & {candidates:Ca
   const [error,setError]=useState('');
   const [pending,transition]=useTransition();
   const router=useRouter();
+  const preview=useWatch({control});
 
   function addCandidate(startTime:string,endTime:string){
     if(!date){setError('先にカレンダーで日付を選んでください。');return;}
@@ -102,6 +104,7 @@ export function MealForm({initial,id,purposes}:{initial?:Fields & {candidates:Ca
           <label>募集締切（日本時間）<input {...register('deadline')} type="datetime-local"/></label>
         </details>
         <p className="muted">最初に「一緒に行く」を押した相手の候補日時で日程が決まります。</p>
+        <MealDraftPreview title={preview.title??''} area={preview.area??''} when={candidates.map(candidateLabel)} maxParticipants={preview.maxParticipants??2} budget={`${Number(preview.budgetMin||0).toLocaleString()}円〜${Number(preview.budgetMax||0).toLocaleString()}円 / 人`} payment={paymentLabels[preview.paymentType??'SPLIT']} restaurant={preview.restaurant} description={preview.description} genre={preview.genre??''}/>
         {error&&<p className="error" role="alert">{error}</p>}
         <button className="btn wide" disabled={pending}>{pending?'保存中…':id?'募集を更新する':'この飯、一緒に行く人！'}</button>
       </fieldset>

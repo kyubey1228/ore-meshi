@@ -6,6 +6,8 @@ import { getPredictionTip } from '@/server/actions/prediction';
 import { buildQuickCandidate, parseFreeTextWhen, type QuickWhen } from '@/lib/quick-post-time';
 import { MEAL_TEMPLATES } from '@/lib/meal-templates';
 import { trackGrowthEvent } from '@/components/growth-tracker';
+import { MealDraftPreview } from '@/components/meal-draft-preview';
+import { candidateLabel, paymentLabels } from '@/lib/format';
 
 const WHEN_OPTIONS: { value: QuickWhen; label: string }[] = [
   { value: 'tonight', label: '今夜' },
@@ -103,6 +105,10 @@ export function QuickPostForm({ defaultArea = '', repeatDefaults, frequentPatter
     });
   }
 
+  const selectedTemplate = MEAL_TEMPLATES.find(t => t.id === templateId);
+  const previewTitle = selectedTemplate?.title ?? (genre ? `${genre}食べたい` : '今日誰かと飯食いたい');
+  const previewCandidate = currentCandidate();
+
   return (
     <div className="panel">
       <h2>30秒で募集する</h2>
@@ -137,6 +143,7 @@ export function QuickPostForm({ defaultArea = '', repeatDefaults, frequentPatter
           {tip.tip && <><br />{tip.tip}</>}
         </p>
       )}
+      <MealDraftPreview title={previewTitle} area={area} when={[candidateLabel(previewCandidate)]} maxParticipants={maxParticipants} budget="2,000円〜4,000円 / 人" payment={paymentLabels.SPLIT} genre={genre} description={repeatDefaults?.description ?? selectedTemplate?.description}/>
       <button className="btn wide" type="button" disabled={pending} onClick={submit}>{pending ? '作成しています…' : 'この内容で募集する'}</button>
       {error && <p role="alert" className="error">{error}</p>}
     </div>

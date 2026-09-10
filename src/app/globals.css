@@ -2,6 +2,13 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+.meal-draft-preview { display:flex; flex-direction:column; gap:.65rem; margin-top:.5rem; padding:1.15rem; background:#fff8f1; border:2px solid #f3a17f; border-radius:10px; box-shadow:4px 4px 0 #f4d2c2; }
+.meal-draft-preview h3,.meal-draft-preview p { margin:0; }
+.meal-draft-preview>.eyebrow { margin-top:.35rem; }
+.meal-preview-restaurant { font-weight:800; }
+.meal-preview-facts { display:flex; flex-direction:column; gap:.25rem; padding-top:.7rem; border-top:1px dashed #d9aa96; font-size:.9rem; font-weight:700; }
+.meal-draft-preview>.tag { align-self:flex-start; }
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
