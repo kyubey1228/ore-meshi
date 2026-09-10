@@ -1,2 +1,30 @@
-'use client';import{useState}from'react';import{estimateMonthlyPrice,type PricingValues}from '@/features/business/pricing';const yen=(n:number)=>new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY',maximumFractionDigits:0}).format(n);
-export function BusinessPricingSimulator({values}:{values:PricingValues}){const[sponsored,setSponsored]=useState(2),[seats,setSeats]=useState(4),[plan,setPlan]=useState<'FREE'|'STANDARD'|'PRO'>('STANDARD');const cost=estimateMonthlyPrice(values,sponsored,seats,plan);return <div className="panel"><h2>月の利用イメージ</h2><label>スポンサー飯：{sponsored}回<input type="range" min="0" max="10" value={sponsored} onChange={e=>setSponsored(Number(e.target.value))}/></label><label>空席スポンサー：{seats}回<input type="range" min="0" max="20" value={seats} onChange={e=>setSeats(Number(e.target.value))}/></label><label>プラン<select value={plan} onChange={e=>setPlan(e.target.value as typeof plan)}><option>FREE</option><option>STANDARD</option><option>PRO</option></select></label><dl className="detail-list"><div><dt>月額</dt><dd>{yen(cost.subscription)}</dd></div><div><dt>スポンサー飯</dt><dd>{yen(cost.sponsoredMeals)}</dd></div><div><dt>空席スポンサー</dt><dd>{yen(cost.seatCampaigns)}</dd></div><div><dt>合計</dt><dd>{yen(cost.total)} / 月</dd></div></dl><small className="muted">実際の請求額はStripe Checkoutで最終確認できます。</small></div>}
+'use client';
+import { useState } from 'react';
+import { estimateMonthlyPrice, type PricingValues } from '@/features/business/pricing';
+
+const yen = (n: number) => new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(n);
+
+export function BusinessPricingSimulator({ values }: { values: PricingValues }) {
+  const [sponsored, setSponsored] = useState(2);
+  const [seats, setSeats] = useState(4);
+  const [plan, setPlan] = useState<'FREE' | 'STANDARD' | 'PRO'>('STANDARD');
+  const cost = estimateMonthlyPrice(values, sponsored, seats, plan);
+  const percentOff = plan === 'FREE' ? null : values.discountPercent[plan];
+
+  return (
+    <div className="panel">
+      <h2>月の利用イメージ</h2>
+      <label>スポンサー飯：{sponsored}回<input type="range" min="0" max="10" value={sponsored} onChange={e => setSponsored(Number(e.target.value))} /></label>
+      <label>空席スポンサー：{seats}回<input type="range" min="0" max="20" value={seats} onChange={e => setSeats(Number(e.target.value))} /></label>
+      <label>プラン<select value={plan} onChange={e => setPlan(e.target.value as typeof plan)}><option>FREE</option><option>STANDARD</option><option>PRO</option></select></label>
+      <dl className="detail-list">
+        <div><dt>月額</dt><dd>{yen(cost.subscription)}</dd></div>
+        <div><dt>スポンサー飯{percentOff ? `（${percentOff}%OFF適用）` : ''}</dt><dd>{yen(cost.sponsoredMeals)}</dd></div>
+        <div><dt>空席スポンサー{percentOff ? `（${percentOff}%OFF適用）` : ''}</dt><dd>{yen(cost.seatCampaigns)}</dd></div>
+        <div><dt>合計</dt><dd>{yen(cost.total)} / 月</dd></div>
+      </dl>
+      {cost.savings > 0 && <p className="tag-pill orange-pill">🎉 {plan}プランのクーポンで、この利用回数だと月{yen(cost.savings)}お得！</p>}
+      <small className="muted">実際の請求額はStripe Checkoutで最終確認できます。</small>
+    </div>
+  );
+}

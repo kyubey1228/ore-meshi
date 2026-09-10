@@ -69,7 +69,7 @@ export async function getBusinessSavingsThisMonth(businessAccountId:string){
     savings+=Math.max(0,base-order.amount);
     if(order.orderType==='SPONSORED_MEAL')sponsoredMealCount++;else seatCampaignCount++;
   }
-  return {sponsoredMealCount,seatCampaignCount,savingsYen:Math.round(savings/100)};
+  return {sponsoredMealCount,seatCampaignCount,savingsYen:savings};
 }
 
 export async function getCampaignShareData(kind:CampaignKind,id:string):Promise<CampaignShareData|null>{

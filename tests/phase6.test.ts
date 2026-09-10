@@ -18,11 +18,11 @@ test('effectivePlanFromAccountは有効なSubscriptionのプランを返す', ()
 });
 
 test('discountedPriceYenは未設定(null)ならnullを返す(割引なし)', () => {
-  assert.equal(discountedPriceYen(500000, null), null);
+  assert.equal(discountedPriceYen(5000, null), null);
 });
 
-test('discountedPriceYenはパーセント割引後の円額を計算する', () => {
-  assert.equal(discountedPriceYen(500000, 10), 4500);
+test('discountedPriceYenはパーセント割引後の円額を計算する(JPYはzero-decimalなので/100換算しない)', () => {
+  assert.equal(discountedPriceYen(5000, 10), 4500);
 });
 
 function baseMeal(overrides: Partial<RankableMeal> = {}): RankableMeal {

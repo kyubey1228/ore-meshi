@@ -11,9 +11,10 @@ export function effectivePlanFromAccount(planOverride: BusinessPlan | null, subs
 }
 
 // 表示専用のヘルパー(決済金額の計算には使わない。実際の決済金額は常にStripe Checkout Session側で確定する)。
+// baseAmountはStripe Price(JPYはzero-decimal通貨のため1円単位、/100換算は不要)と同じ単位の「円」を受け取る。
 export function discountedPriceYen(baseAmount: number, percentOff: number | null): number | null {
   if (percentOff === null) return null;
-  return Math.round((baseAmount * (1 - percentOff / 100)) / 100);
+  return Math.round(baseAmount * (1 - percentOff / 100));
 }
 
 export type BusinessCapabilities = {
