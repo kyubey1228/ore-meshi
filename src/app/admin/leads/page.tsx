@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getAdminLeads, getSalesFunnel } from '@/server/admin';
 import { updateLeadStatus } from '@/server/actions/admin-leads';
-import { ActionForm } from '@/components/action-form';
+import { InlineStatusForm } from '@/components/inline-status-form';
 
 const labels = { NEW: '新規', CONTACTED: '連絡済み', QUALIFIED: '商談中', WON: '成約', LOST: '失注', ARCHIVED: '保管' } as const;
 const STATUS_OPTIONS = Object.keys(labels) as (keyof typeof labels)[];
@@ -46,9 +46,7 @@ export default async function Leads() {
                   <td>{l.monthlyBudgetRange ?? '—'}</td>
                   <td>{l.source}</td>
                   <td>
-                    <ActionForm label="確定" action={data => updateLeadStatus({ id: l.id, status: data.get('status'), returnTo: 'list' })}>
-                      <select name="status" defaultValue={l.status}>{STATUS_OPTIONS.map(s => <option key={s} value={s}>{labels[s]}</option>)}</select>
-                    </ActionForm>
+                    <InlineStatusForm id={l.id} currentStatus={l.status} options={STATUS_OPTIONS} labels={labels} action={updateLeadStatus} extraFields={{ returnTo: 'list' }} />
                   </td>
                   <td>{l.createdAt.toLocaleDateString('ja-JP')}</td>
                 </tr>

@@ -3,6 +3,7 @@ import { getAdminBusinessAccounts, getAdminCampaigns } from '@/server/admin';
 import { getAreaOptions } from '@/lib/data';
 import { adminCreateCampaignDraft, adminUpdateCampaignStatus } from '@/server/actions/admin-leads';
 import { ActionForm } from '@/components/action-form';
+import { InlineStatusForm } from '@/components/inline-status-form';
 import { AreaDatalist } from '@/components/area-datalist';
 import { BusinessStatusBadge } from '@/components/business-status-badge';
 import type { BusinessCampaignStatus } from '@/features/business/campaign-status';
@@ -74,9 +75,7 @@ export default async function AdminCampaigns() {
             <BusinessStatusBadge status={item.status} />
             <h3>{item.title}</h3>
             <p className="muted">{item.businessName} · {item.area || 'エリア未設定'}</p>
-            <ActionForm label="状態を更新" action={data => adminUpdateCampaignStatus({ kind: item.kind, id: item.id, status: data.get('status') })}>
-              <select name="status" defaultValue={item.status}>{STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select>
-            </ActionForm>
+            <InlineStatusForm id={item.id} currentStatus={item.status} options={STATUS_OPTIONS} action={adminUpdateCampaignStatus} extraFields={{ kind: item.kind }} />
           </article>
         ))}
         {!campaigns.length && <p className="muted">まだ施策がありません。</p>}

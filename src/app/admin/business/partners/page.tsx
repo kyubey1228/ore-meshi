@@ -3,6 +3,7 @@ import { getAdminPartnerCampaigns } from '@/server/admin';
 import { getAreaOptions } from '@/lib/data';
 import { adminCreatePartnerCampaign, adminUpdatePartnerCampaignStatus } from '@/server/actions/admin-partners';
 import { ActionForm } from '@/components/action-form';
+import { InlineStatusForm } from '@/components/inline-status-form';
 import { AreaDatalist } from '@/components/area-datalist';
 import { BusinessStatusBadge } from '@/components/business-status-badge';
 import type { BusinessCampaignStatus } from '@/features/business/campaign-status';
@@ -60,9 +61,7 @@ export default async function AdminPartnerCampaigns() {
             <p>{c.description}</p>
             <p className="muted">特典：{c.offerText}</p>
             <p className="muted">参加 {c.joinedPartners}{c.maxPartners !== null ? ` / ${c.maxPartners}` : ''}店舗 · Lead {c._count.leads}件</p>
-            <ActionForm label="確定" action={data => adminUpdatePartnerCampaignStatus({ id: c.id, status: data.get('status') })}>
-              <select name="status" defaultValue={c.status}>{STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select>
-            </ActionForm>
+            <InlineStatusForm id={c.id} currentStatus={c.status} options={STATUS_OPTIONS} action={adminUpdatePartnerCampaignStatus} />
           </article>
         ))}
         {!campaigns.length && <p className="muted">まだ先行パートナー枠がありません。</p>}
