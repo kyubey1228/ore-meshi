@@ -1,11 +1,12 @@
 import 'server-only';
+import { unstable_cache } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/server/admin';
 import { getBusinessPricingCatalog } from '@/server/billing';
 
 // 収益系の集計はまとめて1回のPromise.allで取得する(カードごとに個別queryを発行しない)。
-export async function getMonetizationSummary(days: number) {
-  await requireAdmin();
+// admin限定の閲覧なので60秒キャッシュしても実用上問題ない。
+async function computeMonetizationSummary(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const [orderCounts, orderRevenue, subscriptionCounts, activeSubscriptions, checkoutEvents, catalog, activeBusinessCount] = await Promise.all([
     prisma.sponsorOrder.groupBy({ by: ['orderType', 'status'], where: { createdAt: { gte: since } }, _count: { _all: true } }),
@@ -52,4 +53,8 @@ export async function getMonetizationSummary(days: number) {
     checkoutCompleted,
     checkoutConversionRate: checkoutStarted ? checkoutCompleted / checkoutStarted : 0,
   };
+}
+export async function getMonetizationSummary(days: number) {
+  await requireAdmin();
+  return unstable_cache(computeMonetizationSummary, ['monetization-summary'], { revalidate: 60 })(days);
 }

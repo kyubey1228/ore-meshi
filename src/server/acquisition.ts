@@ -1,4 +1,5 @@
 import 'server-only';
+import { unstable_cache } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/server/admin';
 import { classifyChannel, type Channel } from '@/lib/channel';
@@ -23,8 +24,7 @@ async function classifyCohort(userIds: string[]) {
   return result;
 }
 
-export async function getAcquisitionDashboard(days: number) {
-  await requireAdmin();
+async function computeAcquisitionDashboard(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const [signupEvents, referralUserIds, visitorSessions] = await Promise.all([
     prisma.growthEvent.findMany({ where: { eventType: 'SIGNUP_COMPLETED', createdAt: { gte: since }, userId: { not: null } }, select: { userId: true, source: true, referrer: true, utmMedium: true, utmCampaign: true } }),
@@ -75,8 +75,13 @@ export async function getAcquisitionDashboard(days: number) {
   };
 }
 
-export async function getCampaignDashboard(days: number) {
+// 管理者が頻繁にリロードしても毎回全件集計し直さないよう60秒キャッシュする(admin限定の閲覧なので鮮度は問題にならない)。
+export const getAcquisitionDashboard = async (days: number) => {
   await requireAdmin();
+  return unstable_cache(computeAcquisitionDashboard, ['acquisition-dashboard'], { revalidate: 60 })(days);
+};
+
+async function computeCampaignDashboard(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const [visits, signups] = await Promise.all([
     prisma.growthEvent.groupBy({ by: ['utmCampaign'], where: { createdAt: { gte: since }, utmCampaign: { not: null } }, _count: { _all: true } }),
@@ -101,3 +106,8 @@ export async function getCampaignDashboard(days: number) {
     conversionRate: v.signup ? v.completed / v.signup : 0,
   })).sort((a, b) => b.visits - a.visits);
 }
+
+export const getCampaignDashboard = async (days: number) => {
+  await requireAdmin();
+  return unstable_cache(computeCampaignDashboard, ['campaign-dashboard'], { revalidate: 60 })(days);
+};

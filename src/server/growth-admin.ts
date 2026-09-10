@@ -1,9 +1,9 @@
 import 'server-only';
+import { unstable_cache } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/server/admin';
 
-export async function getGrowthDashboard(days: number) {
-  await requireAdmin();
+async function computeGrowthDashboard(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const [events, completedMatches] = await Promise.all([
     prisma.growthEvent.groupBy({ by: ['eventType'], where: { createdAt: { gte: since } }, _count: { _all: true } }),
@@ -42,4 +42,9 @@ export async function getGrowthDashboard(days: number) {
     topCompletedAreas,
     counts,
   };
+}
+// admin限定の閲覧なので60秒キャッシュ(頻繁なリロードのたびに全件再集計しない)。
+export async function getGrowthDashboard(days: number) {
+  await requireAdmin();
+  return unstable_cache(computeGrowthDashboard, ['growth-dashboard'], { revalidate: 60 })(days);
 }

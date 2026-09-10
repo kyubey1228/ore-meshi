@@ -1,4 +1,5 @@
 import 'server-only';
+import { unstable_cache } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/server/admin';
 import { percentiles } from '@/lib/percentile';
@@ -12,8 +13,9 @@ function median(values: number[]): number | null {
 
 function hoursBetween(a: Date, b: Date) { return (b.getTime() - a.getTime()) / (1000 * 60 * 60); }
 
-export async function getTimeToMatchStats(days: number) {
-  await requireAdmin();
+// 管理者が頻繁にリロードしても毎回全件集計し直さないよう60秒キャッシュする(admin限定の閲覧なので鮮度は問題にならない)。
+// unstable_cacheはcookies()等の動的APIを内部で使えないため、requireAdmin()は必ずcache対象の外側で呼ぶ。
+async function computeTimeToMatchStats(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const prevSince = new Date(Date.now() - days * 2 * 24 * 60 * 60 * 1000);
   const [current, previousOnly] = await Promise.all([
@@ -49,11 +51,14 @@ export async function getTimeToMatchStats(days: number) {
     genreStats: toStats(byGenre, 'genre') as { genre: string; medianHours: number | null; sampleSize: number }[],
   };
 }
+export async function getTimeToMatchStats(days: number) {
+  await requireAdmin();
+  return unstable_cache(computeTimeToMatchStats, ['time-to-match-stats'], { revalidate: 60 })(days);
+}
 
 // Matched(必要人数到達)とCompleted(実際に開催が確認された)を明確に分離した集計。
 // Weekly Completed Meals / Weekly Users Who Actually Dined をNorth Starとして扱う。
-export async function getCompletionStats(days: number) {
-  await requireAdmin();
+async function computeCompletionStats(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const [weeklyCompletedMeals, weeklyDiners, matchedInPeriod, completedInPeriod, notCompletedInPeriod] = await Promise.all([
@@ -73,9 +78,12 @@ export async function getCompletionStats(days: number) {
     completionConfirmationRate: totalConfirmed ? completedInPeriod / totalConfirmed : 0,
   };
 }
-
-export async function getPhase3Overview(days: number) {
+export async function getCompletionStats(days: number) {
   await requireAdmin();
+  return unstable_cache(computeCompletionStats, ['completion-stats'], { revalidate: 60 })(days);
+}
+
+async function computePhase3Overview(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -110,6 +118,7 @@ export async function getPhase3Overview(days: number) {
   }
 
   // Second Join Rate / Second Recruitment Rate: 累計で2回以上参加/募集したユーザーの割合(直近作成ユーザーに限らず全体で判定)。
+  // 意図的に全期間対象(groupByにWHEREなし)。データ量が増えた場合は日次スナップショットへの移行を検討する。
   const [joinCountsRaw, hostCountsRaw] = await Promise.all([
     prisma.joinRequest.groupBy({ by: ['userId'], _count: { _all: true } }),
     prisma.meal.groupBy({ by: ['hostId'], _count: { _all: true } }),
@@ -134,10 +143,13 @@ export async function getPhase3Overview(days: number) {
     signupCohortSize: signupCohort.length,
   };
 }
+export async function getPhase3Overview(days: number) {
+  await requireAdmin();
+  return unstable_cache(computePhase3Overview, ['phase3-overview'], { revalidate: 60 })(days);
+}
 
 // Second Join Rate自体はgetPhase3Overviewに既存。ここでは「初回Completed後の再参加」と「2回目までの日数」を補完する。
-export async function getRepeatStats() {
-  await requireAdmin();
+async function computeRepeatStats() {
   const [joinRows, completedFirstJoinUserIds] = await Promise.all([
     prisma.joinRequest.findMany({ select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' } }),
     prisma.matchParticipant.findMany({ where: { match: { status: 'COMPLETED' } }, select: { userId: true }, distinct: ['userId'] }),
@@ -155,9 +167,12 @@ export async function getRepeatStats() {
     completedUserSampleSize: completedUserIds.size,
   };
 }
-
-export async function getNotificationAnalysis(days: number) {
+export async function getRepeatStats() {
   await requireAdmin();
+  return unstable_cache(computeRepeatStats, ['repeat-stats'], { revalidate: 60 })();
+}
+
+async function computeNotificationAnalysis(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const notifications = await prisma.notification.findMany({ where: { createdAt: { gte: since } }, select: { type: true, readAt: true, clickedAt: true } });
   const byType = new Map<string, { sent: number; opened: number; clicked: number }>();
@@ -178,9 +193,12 @@ export async function getNotificationAnalysis(days: number) {
     byType: [...byType.entries()].map(([type, row]) => ({ type, ...row, clickRate: row.sent ? row.clicked / row.sent : 0 })),
   };
 }
-
-export async function getDemandDashboard(days: number) {
+export async function getNotificationAnalysis(days: number) {
   await requireAdmin();
+  return unstable_cache(computeNotificationAnalysis, ['notification-analysis'], { revalidate: 60 })(days);
+}
+
+async function computeDemandDashboard(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const [created, matched, byArea, byGenre, recruitmentsCreated] = await Promise.all([
     prisma.demandIntent.count({ where: { createdAt: { gte: since } } }),
@@ -199,9 +217,12 @@ export async function getDemandDashboard(days: number) {
     byGenre: byGenre.map(r => ({ genre: r.genre ?? '未指定', count: r._count._all })).sort((a, b) => b.count - a.count).slice(0, 10),
   };
 }
-
-export async function getSupplyDemandGap() {
+export async function getDemandDashboard(days: number) {
   await requireAdmin();
+  return unstable_cache(computeDemandDashboard, ['demand-dashboard'], { revalidate: 60 })(days);
+}
+
+async function computeSupplyDemandGap() {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const [demandByArea, mealsByArea, participantsByArea] = await Promise.all([
     prisma.demandIntent.groupBy({ by: ['area'], where: { createdAt: { gte: since } }, _count: { _all: true } }),
@@ -220,4 +241,8 @@ export async function getSupplyDemandGap() {
     })
     .sort((a, b) => b.gap - a.gap)
     .slice(0, 15);
+}
+export async function getSupplyDemandGap() {
+  await requireAdmin();
+  return unstable_cache(computeSupplyDemandGap, ['supply-demand-gap'], { revalidate: 60 })();
 }
