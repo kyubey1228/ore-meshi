@@ -8,7 +8,7 @@ export type BillingPrice = {
   currency: string;
   interval: string | null;
 };
-export type BusinessPricingCatalog = { sponsoredMeal:number; seatCampaign:number; areaSponsorship:number|null; FREE:0; STANDARD:number; PRO:number; currency:string };
+export type BusinessPricingCatalog = { sponsoredMeal:number; seatCampaign:number; areaSponsorship:number|null; FREE:0; STANDARD:number; PRO:number; currency:string; discountPercent:{STANDARD:number|null;PRO:number|null} };
 
 export type CheckoutResult =
   | { success: true; url: string }

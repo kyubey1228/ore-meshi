@@ -6,8 +6,9 @@ import { getStripe } from '@/lib/stripe';
 import { prisma } from '@/lib/prisma';
 import { UserError, ensure } from '@/server/action';
 import { requireBillingMembership } from '@/server/billing/auth';
-import { appUrl, getOneTimePriceId, getSubscriptionPriceId } from '@/server/billing/config';
+import { appUrl, getOneTimePriceId, getPlanDiscountCouponId, getSubscriptionPriceId } from '@/server/billing/config';
 import { getOrCreateBillingCustomer } from '@/server/billing/customer';
+import { getBusinessPlan } from '@/server/billing';
 import type { CheckoutResult } from '@/server/billing/types';
 import { marketingSessionKey } from '@/server/marketing';
 import { getEligibleFirstTimeOffer } from '@/server/sales';
@@ -57,6 +58,10 @@ async function campaignCheckout(campaignIdInput: unknown, orderType: CampaignOrd
 
     const sessionKey=await marketingSessionKey();
     const offer=firstTimeOfferTargets.has(orderType)?await getEligibleFirstTimeOffer(campaign.businessAccountId,orderType as 'SPONSORED_MEAL'|'SEAT_CAMPAIGN'):null;
+    // 初回オファーがあればそちらを優先し(Stripeは1 Checkout Sessionに1つのdiscountsしか安全に扱えないため併用しない)、
+    // 無ければSTANDARD/PROの実割引(Stripe Couponがsource of truth。未設定なら割引なし)を適用する。
+    const plan = orderType === 'AREA_FEATURED' ? 'FREE' : await getBusinessPlan(campaign.businessAccountId);
+    const planCouponId = !offer && (plan === 'STANDARD' || plan === 'PRO') ? getPlanDiscountCouponId(plan) : undefined;
     const metadata = { businessAccountId: campaign.businessAccountId, campaignId, orderId: order.id, orderType, marketingSessionKey:sessionKey,firstTimeOfferId:offer?.id??'' };
     const session = await getStripe().checkout.sessions.create({
       mode: 'payment',
@@ -66,7 +71,7 @@ async function campaignCheckout(campaignIdInput: unknown, orderType: CampaignOrd
       cancel_url: appUrl(`/business/dashboard?checkout=cancelled&kind=${orderType}`),
       metadata,
       payment_intent_data: { metadata },
-      ...(offer?.stripePromotionCodeId?{discounts:[{promotion_code:offer.stripePromotionCodeId}]}:{}),
+      ...(offer?.stripePromotionCodeId?{discounts:[{promotion_code:offer.stripePromotionCodeId}]}:planCouponId?{discounts:[{coupon:planCouponId}]}:{}),
     }, { idempotencyKey: `sponsor-checkout:${order.id}:${stripePriceId}` });
     ensure(session.url, 'Stripe Checkout URLを取得できませんでした。');
     await prisma.sponsorOrder.update({ where: { id: order.id }, data: { stripeCheckoutSessionId: session.id, status: 'PENDING_PAYMENT' } });

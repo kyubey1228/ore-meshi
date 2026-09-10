@@ -4,6 +4,7 @@ import { currentUserId } from '@/server/auth';
 import { ensure } from '@/server/action';
 import { isCampaignShareable, type CampaignKind, type CampaignShareData } from '@/features/x-sharing/templates';
 import { cookies } from 'next/headers';
+import { getBusinessPricingCatalog } from '@/server/billing';
 
 export async function businessPostingMembership(businessAccountId?:string){
   const userId=await currentUserId();ensure(userId,'Twitter/Xでログインしてください。');
@@ -47,6 +48,25 @@ export async function getBusinessCompletionStats(businessAccountId:string){
   if(matchIds.length===0)return {estimatedParticipants:0};
   const matches=await prisma.match.findMany({where:{id:{in:matchIds}},select:{meal:{select:{maxParticipants:true}}}});
   return {estimatedParticipants:matches.reduce((sum,m)=>sum+m.meal.maxParticipants,0)};
+}
+
+// 実際に支払った金額(SponsorOrder.amount、Stripeが確定した実額)と、現在のカタログ通常価格の差から
+// 「今月いくら得したか」を計算する。架空値ではなく実購入履歴のみを使う。
+export async function getBusinessSavingsThisMonth(businessAccountId:string){
+  const since=new Date();since.setDate(1);since.setHours(0,0,0,0);
+  const [orders,catalog]=await Promise.all([
+    prisma.sponsorOrder.findMany({where:{businessAccountId,status:'PAID',paidAt:{gte:since},orderType:{in:['SPONSORED_MEAL','SEAT_CAMPAIGN']}},select:{orderType:true,amount:true}}),
+    getBusinessPricingCatalog(),
+  ]);
+  if(!catalog||orders.length===0)return {sponsoredMealCount:0,seatCampaignCount:0,savingsYen:0};
+  let savings=0,sponsoredMealCount=0,seatCampaignCount=0;
+  for(const order of orders){
+    const base=order.orderType==='SPONSORED_MEAL'?catalog.sponsoredMeal:order.orderType==='SEAT_CAMPAIGN'?catalog.seatCampaign:null;
+    if(base===null||order.amount===null)continue;
+    savings+=Math.max(0,base-order.amount);
+    if(order.orderType==='SPONSORED_MEAL')sponsoredMealCount++;else seatCampaignCount++;
+  }
+  return {sponsoredMealCount,seatCampaignCount,savingsYen:Math.round(savings/100)};
 }
 
 export async function getCampaignShareData(kind:CampaignKind,id:string):Promise<CampaignShareData|null>{

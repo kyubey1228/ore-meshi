@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getStripe } from '@/lib/stripe';
 import { requireBillingMembership } from './auth';
-import { getOneTimePriceId, getSubscriptionPriceId } from './config';
+import { getOneTimePriceId, getPlanDiscountCouponId, getSubscriptionPriceId } from './config';
 import type { BillingPrice, BusinessBillingState, BusinessPricingCatalog, SponsorOrderState } from './types';
 import { capabilitiesForPlan } from '@/lib/business-capabilities';
 
@@ -45,10 +45,16 @@ export async function getBusinessSubscriptionPrices(): Promise<BillingPrice[]> {
   }
 }
 async function fetchAreaSponsorshipPrice():Promise<number|null>{try{const price=await getStripe().prices.retrieve(getOneTimePriceId('AREA_FEATURED'));return price.unit_amount;}catch{return null;}}
-async function fetchBusinessPricingCatalog():Promise<BusinessPricingCatalog|null>{try{const ids=[getOneTimePriceId('SPONSORED_MEAL'),getOneTimePriceId('SEAT_CAMPAIGN'),getSubscriptionPriceId('STANDARD'),getSubscriptionPriceId('PRO')];const [prices,areaSponsorship]=await Promise.all([Promise.all(ids.map(id=>getStripe().prices.retrieve(id))),fetchAreaSponsorshipPrice()]);if(prices.some(p=>p.currency!==prices[0].currency||p.unit_amount===null))return null;return{sponsoredMeal:prices[0].unit_amount!,seatCampaign:prices[1].unit_amount!,areaSponsorship,FREE:0,STANDARD:prices[2].unit_amount!,PRO:prices[3].unit_amount!,currency:prices[0].currency};}catch(error){console.error('Stripe pricing catalog could not be loaded',error instanceof Error?error.name:'UnknownError');return null;}}
+async function fetchDiscountPercent(plan:'STANDARD'|'PRO'):Promise<number|null>{
+  const couponId=getPlanDiscountCouponId(plan);if(!couponId)return null;
+  try{const coupon=await getStripe().coupons.retrieve(couponId);return coupon.percent_off??null;}catch(error){console.error('Stripe coupon could not be loaded',error instanceof Error?error.name:'UnknownError');return null;}
+}
+async function fetchBusinessPricingCatalog():Promise<BusinessPricingCatalog|null>{try{const ids=[getOneTimePriceId('SPONSORED_MEAL'),getOneTimePriceId('SEAT_CAMPAIGN'),getSubscriptionPriceId('STANDARD'),getSubscriptionPriceId('PRO')];const [prices,areaSponsorship,standardDiscount,proDiscount]=await Promise.all([Promise.all(ids.map(id=>getStripe().prices.retrieve(id))),fetchAreaSponsorshipPrice(),fetchDiscountPercent('STANDARD'),fetchDiscountPercent('PRO')]);if(prices.some(p=>p.currency!==prices[0].currency||p.unit_amount===null))return null;return{sponsoredMeal:prices[0].unit_amount!,seatCampaign:prices[1].unit_amount!,areaSponsorship,FREE:0,STANDARD:prices[2].unit_amount!,PRO:prices[3].unit_amount!,currency:prices[0].currency,discountPercent:{STANDARD:standardDiscount,PRO:proDiscount}};}catch(error){console.error('Stripe pricing catalog could not be loaded',error instanceof Error?error.name:'UnknownError');return null;}}
 // 価格はStripeがsource of truthだが、表示のたびにStripe APIを叩かないよう1時間キャッシュする。
 // 決済時の最終金額はcampaignCheckout側でStripe Checkout Session作成時に都度Priceを参照するため、ここは表示専用。
 export const getBusinessPricingCatalog = unstable_cache(fetchBusinessPricingCatalog, ['business-pricing-catalog'], { revalidate: 3600 });
+
+export { discountedPriceYen } from '@/lib/business-capabilities';
 
 export async function getBusinessBillingState(businessAccountId?: string): Promise<BusinessBillingState> {
   const membership = await requireBillingMembership(businessAccountId);
