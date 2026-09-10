@@ -1,0 +1,2 @@
+export type PricingValues={sponsoredMeal:number;seatCampaign:number;FREE:number;STANDARD:number;PRO:number};
+export function estimateMonthlyPrice(values:PricingValues,sponsoredMeals:number,seatCampaigns:number,plan:'FREE'|'STANDARD'|'PRO'){return{subscription:values[plan],sponsoredMeals:values.sponsoredMeal*sponsoredMeals,seatCampaigns:values.seatCampaign*seatCampaigns,total:values[plan]+values.sponsoredMeal*sponsoredMeals+values.seatCampaign*seatCampaigns};}

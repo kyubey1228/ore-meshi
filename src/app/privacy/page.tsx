@@ -1,0 +1,1 @@
+export const metadata={title:'プライバシーポリシー'};export default function Privacy(){return <section className="section narrow"><h1>プライバシーポリシー</h1><p>問い合わせ情報は営業連絡、サービス案内、Business登録のために利用します。</p><p className="notice">正式なポリシー本文は公開前に法務確認のうえ掲載します。</p></section>}

@@ -1,0 +1,1 @@
+export const metadata={title:'Business利用条件'};export default function Terms(){return <section className="section narrow"><h1>Business利用条件</h1><p>スポンサー掲載規約、広告掲載ポリシー、Business利用規約をこのページで案内します。</p><p className="notice">正式な規約本文は公開前に法務確認のうえ掲載します。</p></section>}
