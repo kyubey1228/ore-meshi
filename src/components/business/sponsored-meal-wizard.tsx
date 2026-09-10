@@ -6,17 +6,20 @@ import { generateSponsoredMealPost } from '@/features/x-sharing/templates';
 
 const STEP_COUNT = 4;
 
-type Props = { businessAccountId: string; businessName: string; defaultRestaurantName: string; defaultArea: string; priceYen: string };
+type RepeatDefaults = { title: string; restaurantName: string; area: string; genre: string; benefit: string; description: string; participantLimit: number };
+type Props = { businessAccountId: string; businessName: string; defaultRestaurantName: string; defaultArea: string; priceYen: string; repeatDefaults?: RepeatDefaults };
 
-export function SponsoredMealWizard({ businessAccountId, businessName, defaultRestaurantName, defaultArea, priceYen }: Props) {
+export function SponsoredMealWizard({ businessAccountId, businessName, defaultRestaurantName, defaultArea, priceYen, repeatDefaults }: Props) {
   const [step, setStep] = useState(1);
-  const [title, setTitle] = useState('');
-  const [restaurantName, setRestaurantName] = useState(defaultRestaurantName);
-  const [area, setArea] = useState(defaultArea);
+  const [title, setTitle] = useState(repeatDefaults?.title ?? '');
+  const [restaurantName, setRestaurantName] = useState(repeatDefaults?.restaurantName ?? defaultRestaurantName);
+  const [area, setArea] = useState(repeatDefaults?.area ?? defaultArea);
+  const [genre, setGenre] = useState(repeatDefaults?.genre ?? '');
+  // 日時は「同じ条件でもう一度」でも必ず選び直させる(過去のstartsAtをそのまま使い回さない)。
   const [startsAt, setStartsAt] = useState('');
-  const [participantLimit, setParticipantLimit] = useState(4);
-  const [benefit, setBenefit] = useState('');
-  const [description, setDescription] = useState('');
+  const [participantLimit, setParticipantLimit] = useState(repeatDefaults?.participantLimit ?? 4);
+  const [benefit, setBenefit] = useState(repeatDefaults?.benefit ?? '');
+  const [description, setDescription] = useState(repeatDefaults?.description ?? '');
   const [pending, start] = useTransition();
   const [error, setError] = useState('');
   const router = useRouter();
@@ -34,6 +37,7 @@ export function SponsoredMealWizard({ businessAccountId, businessName, defaultRe
         title,
         restaurantName,
         area,
+        genre,
         benefit,
         description,
         startsAt: startDate.toISOString(),
@@ -64,6 +68,7 @@ export function SponsoredMealWizard({ businessAccountId, businessName, defaultRe
           <label>見出し<input value={title} onChange={e => setTitle(e.target.value)} maxLength={80} placeholder="例：今日は店長のおごりです" required /></label>
           <label>店舗名<input value={restaurantName} onChange={e => setRestaurantName(e.target.value)} maxLength={80} required /></label>
           <label>エリア<input value={area} onChange={e => setArea(e.target.value)} maxLength={80} required /></label>
+          <label>ジャンル（任意）<input value={genre} onChange={e => setGenre(e.target.value)} maxLength={60} placeholder="例：焼肉" /></label>
           <label>開催日時<input type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} required /></label>
           <label>対象人数<input type="number" min={1} max={100} value={participantLimit} onChange={e => setParticipantLimit(Number(e.target.value))} required /></label>
           <label>特典<textarea value={benefit} onChange={e => setBenefit(e.target.value)} maxLength={120} rows={2} placeholder="例：最初のドリンク無料" /></label>
