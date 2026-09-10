@@ -6,6 +6,10 @@ import { dateTimeLabel, matchStatusLabels } from '@/lib/format';
 import { UserAvatar } from '@/components/meal-card';
 import { DiningTypePills } from '@/components/tag-pills';
 import { MatchControls, RescheduleForm, ProposalControls, CancelProposal, FeedbackForm } from '@/components/match-controls';
+import { TrackedLink } from '@/components/growth-tracker';
+import { ReferralShare } from '@/components/referral-share';
+import { getOrCreateReferralCode } from '@/server/referral';
+import { appUrl } from '@/lib/social';
 
 export default async function MatchPage({ params }: { params: Promise<{ id: string }> }) {
   const userId = await requirePageUser();
@@ -13,6 +17,8 @@ export default async function MatchPage({ params }: { params: Promise<{ id: stri
   const match = await getMatchById(id);
   if (!match) notFound();
   const canComplete = match.scheduledAt <= new Date();
+  const isHost = match.meal.hostId === userId;
+  const referralCode = match.status === 'COMPLETED' ? await getOrCreateReferralCode(userId) : null;
   return <section className="section narrow">
     <Link className="text-link" href="/mypage">← マイページへ</Link>
     <div className="panel detail">
@@ -25,5 +31,13 @@ export default async function MatchPage({ params }: { params: Promise<{ id: stri
     </div>
     {match.status === 'ACTIVE' && <div className="panel"><h2>リスケ</h2><p className="muted">参加者全員がOKすると新しい日時に変わります。</p><RescheduleForm matchId={id} />{match.rescheduleProposals.map((proposal) => <article className="request" key={proposal.id}><strong>{dateTimeLabel(proposal.proposedAt)}</strong><p>{proposal.proposer.displayName}さんからの提案 · {proposal.status}</p>{proposal.status === 'PENDING' && (proposal.proposerId === userId ? <CancelProposal id={proposal.id} /> : proposal.votes.some(v => v.userId === userId) ? <p className="success">この日でOKを送りました。</p> : <ProposalControls id={proposal.id} />)}</article>)}</div>}
     {match.status === 'COMPLETED' && <div className="panel"><h2>飯、どうだった？</h2><p className="muted">回答やメモは公開されません。</p>{match.participants.filter(p => p.userId !== userId).map(({ user }) => { const done = match.diningFeedbacks.some(f => f.toUserId === user.id); return <article className="request" key={user.id}><div className="person"><UserAvatar user={user} /><strong>{user.displayName}</strong></div>{done ? <p className="success">感想を送りました。</p> : <FeedbackForm matchId={id} toUserId={user.id} />}</article>; })}</div>}
+    {match.status === 'COMPLETED' && <div className="panel">
+      <h2>また誰かと飯行く？</h2>
+      <div className="hero-actions">
+        <TrackedLink className="btn" eventType="REPEAT_JOIN_STARTED" payload={{ recruitmentId: match.mealId, loggedIn: true }} href="/meals">次も探す →</TrackedLink>
+        {isHost && <Link className="btn secondary" href={`/meals/new?repeat=${match.mealId}`}>同じ条件でまた募集する</Link>}
+      </div>
+    </div>}
+    {referralCode && <ReferralShare inviteUrl={`${appUrl()}/invite/${referralCode}`} mealId={match.mealId} text={`「俺は誰かと飯が食いたい！」で飯に行ってきました。\n\n${appUrl()}/invite/${referralCode}`} />}
   </section>;
 }
