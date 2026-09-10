@@ -6,6 +6,7 @@ import TwitterProvider, { type TwitterProfile } from 'next-auth/providers/twitte
 import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { z } from 'zod';
+import { recordGrowthEvent } from '@/server/growth';
 
 export const authConfigured = Boolean(
   process.env.AUTH_SECRET &&
@@ -58,6 +59,7 @@ export const authOptions: NextAuthOptions = {
         throw new Error('X OAuth account ID does not match the returned profile.');
       }
       // Xが検証したIDだけをアカウントキーとして使い、クライアント由来のIDは信用しない。
+      const existing = await prisma.user.findUnique({ where: { twitterId: xProfile.id }, select: { id: true } });
       const user = await prisma.user.upsert({
         where: { twitterId: xProfile.id },
         create: {
@@ -76,6 +78,8 @@ export const authOptions: NextAuthOptions = {
         select: { id: true },
       });
 
+      if (!existing) await recordGrowthEvent('SIGNUP_COMPLETED', { userId: user.id, loggedIn: true });
+
       token.userId = user.id;
       return token;
     },
@@ -93,9 +97,9 @@ export async function currentUserId() {
   return session?.user?.id ?? null;
 }
 
-export async function requirePageUser() {
+export async function requirePageUser(next?: string) {
   const id = await currentUserId();
-  if (!id) redirect('/login');
+  if (!id) redirect(next ? `/login?next=${encodeURIComponent(next)}` : '/login');
   return id;
 }
 
