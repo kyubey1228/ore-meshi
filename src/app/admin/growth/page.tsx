@@ -4,6 +4,8 @@ import { getCompletionStats, getDemandDashboard, getNotificationAnalysis, getPha
 import { getGrowthInsights } from '@/server/growth-insights';
 import { recordGrowthRecommendationAction } from '@/server/actions/growth-recommendations';
 import { TrackedRecommendationLink } from '@/components/admin/tracked-recommendation-link';
+import { getExperimentResults } from '@/server/experiments-admin';
+import { JOIN_CTA_COPY } from '@/lib/experiments';
 import { measurePerformance } from '@/lib/performance';
 
 export const metadata = { title: 'Growth Dashboard' };
@@ -17,7 +19,7 @@ function days(n: number | null) { return n === null ? 'データ不足' : `${n.t
 export default async function GrowthDashboard({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const { days: rawDays } = await searchParams;
   const days_ = PERIODS.includes(Number(rawDays)) ? Number(rawDays) : 30;
-  const [data, overview, completion, timeToMatch, repeat, notificationAnalysis, demand, supplyGap, insights] = await measurePerformance('ADMIN', 'growth dashboard aggregates', () => Promise.all([
+  const [data, overview, completion, timeToMatch, repeat, notificationAnalysis, demand, supplyGap, insights, experimentResults] = await measurePerformance('ADMIN', 'growth dashboard aggregates', () => Promise.all([
     getGrowthDashboard(days_),
     getPhase3Overview(days_),
     getCompletionStats(days_),
@@ -27,6 +29,7 @@ export default async function GrowthDashboard({ searchParams }: { searchParams: 
     getDemandDashboard(days_),
     getSupplyDemandGap(),
     getGrowthInsights(days_),
+    getExperimentResults('join_cta', days_),
   ]));
   const maxAreaCount = Math.max(1, ...data.topCompletedAreas.map(a => a.count));
   const timeToMatchChange = timeToMatch.medianTimeToMatchHours !== null && timeToMatch.previousMedianTimeToMatchHours
@@ -137,15 +140,27 @@ export default async function GrowthDashboard({ searchParams }: { searchParams: 
       </div>
 
       <div className="panel">
-        <h2>シェア・紹介</h2>
+        <h2>シェア・紹介（Virality）</h2>
         <div className="analytics-grid">
           <div><strong>{data.shareTotal}</strong><span>シェア数</span></div>
           <div><strong>{data.referralOpens}</strong><span>招待URL開封</span></div>
           <div><strong>{data.referralSignups}</strong><span>紹介経由登録</span></div>
           <div><strong>{percent(data.referralConversionRate)}</strong><span>紹介登録率</span></div>
+          <div><strong>{percent(data.viralShare)}</strong><span>新規登録に占める紹介経由の割合</span></div>
           <div><strong>{overview.referralActivatedUsers}</strong><span>紹介経由アクティブ化（累計）</span></div>
           <div><strong>{percent(overview.referralActivationRate)}</strong><span>アクティブ化率（登録済み紹介のうち）</span></div>
         </div>
+        <p className="muted">招待の送信数自体は計測していないため、招待数×転換率で求める厳密なK-factorは算出していません。</p>
+      </div>
+
+      <div className="panel">
+        <h2>Growth Experiment：参加CTA文言（join_cta）</h2>
+        <p className="muted">未ログインユーザーへの参加ボタン文言をA/B/Cでテストしています。表示(EXPERIMENT_EXPOSED)とクリック(EXPERIMENT_CONVERSION)をセッション単位で名寄せした値です。</p>
+        {experimentResults.length ? (
+          <div className="comparison-scroll"><table><thead><tr><th>バリアント</th><th>文言</th><th>表示</th><th>クリック</th><th>クリック率</th></tr></thead><tbody>
+            {experimentResults.map(r => <tr key={r.variant}><td>{r.variant}</td><td>{JOIN_CTA_COPY[r.variant] ?? '—'}</td><td>{r.exposed}</td><td>{r.converted}</td><td>{percent(r.cvr)}</td></tr>)}
+          </tbody></table></div>
+        ) : <p className="muted">まだデータがありません。</p>}
       </div>
 
       <div className="panel">

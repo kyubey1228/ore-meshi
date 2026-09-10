@@ -36,6 +36,9 @@ async function computeGrowthDashboard(days: number) {
     referralOpens,
     referralSignups,
     referralConversionRate: referralOpens ? referralSignups / referralOpens : 0,
+    // Virality(この期間の新規登録のうち紹介経由が占める割合)。招待送信数を計測していないため
+    // 厳密なK-factor(招待数×転換率)は出さず、既存データで説明できる比率にとどめる。
+    viralShare: signupCompleted ? referralSignups / signupCompleted : 0,
     quickPostStarted,
     quickPostCompleted,
     quickPostCompletionRate: quickPostStarted ? quickPostCompleted / quickPostStarted : 0,

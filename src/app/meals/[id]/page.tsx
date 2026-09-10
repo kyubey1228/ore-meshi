@@ -84,6 +84,7 @@ export default async function MealDetail({params,searchParams}:Props){
 
   return <section className="section narrow">
     <GrowthTracker eventType="RECRUITMENT_VIEWED" recruitmentId={id} area={meal.area} foodCategory={meal.genre??undefined} loggedIn={Boolean(userId)}/>
+    {variant&&<GrowthTracker eventType="EXPERIMENT_EXPOSED" recruitmentId={id} experimentName="join_cta" variant={variant}/>}
     <RecentlyViewedRecorder mealId={id}/>
     {query.ref&&<ReferralClickRecorder referralCode={query.ref} mealId={id}/>}
     {jsonLd&&<script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(jsonLd)}}/>}
