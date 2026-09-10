@@ -844,6 +844,7 @@ model SponsorOrder {
 
   @@index([businessAccountId, createdAt])
   @@index([orderType, campaignId, status])
+  @@index([status, paidAt])
 }
 
 // エリア×ジャンル単位の期間限定スポンサー掲載。既存のSponsorOrder/OrderType.AREA_FEATURED/
@@ -894,6 +895,7 @@ model SponsoredMeal {
   sponsorName       String
   restaurantName    String
   area              String
+  genre             String?
   startsAt          DateTime
   participantLimit  Int
   remainingSlots    Int
