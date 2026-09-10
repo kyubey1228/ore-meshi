@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, BarChart3, Clock3, Megaphone, Users } from 'lucide-react';
 import { currentBusinessMembership } from '@/server/business';
@@ -28,7 +29,7 @@ export default async function BusinessLanding() {
   return <div className="business-lp">
     <BusinessMarketingTracker eventType="BUSINESS_LP_VIEW" />
     <section className="business-hero">
-      <span className="business-hero-circle" aria-hidden="true"><span>💺</span></span>
+      <span className="business-hero-circle" aria-hidden="true"><Image src="/business/hero/izakaya-interior.jpg" alt="" fill sizes="420px" style={{ objectFit: 'cover' }} /></span>
       <span className="eyebrow orange">俺メシ FOR BUSINESS</span><h1>空席を、<br />今夜の客に。</h1>
       <p>スポンサー飯・空席スポンサーを使って、店舗の空席やキャンペーンを実際の“飯の予定”に変えます。</p>
       <div className="hero-actions"><BusinessMarketingLink className="btn" href={signupHref} eventType="BUSINESS_SIGNUP_CTA_CLICK" placement="HERO">{membership ? '店舗管理へ' : '店舗・企業登録'}<ArrowRight size={18} /></BusinessMarketingLink><BusinessMarketingLink className="btn secondary" href="/business/pricing" eventType="PRICING_CTA_CLICK" placement="HERO">料金を見る</BusinessMarketingLink><BusinessMarketingLink className="btn ghost" href="/business/contact" eventType="CONTACT_CTA_CLICK" placement="HERO">まず相談する</BusinessMarketingLink></div>
