@@ -3,25 +3,69 @@ import { prisma } from '@/lib/prisma';
 import { currentUserId, requirePageUser } from '@/server/auth';
 import { filterSchema, idSchema } from '@/validators';
 import type { Prisma } from '@prisma/client';
+import { rankMeals, type RankingContext } from '@/lib/meal-ranking';
 export const publicUser = { id:true, twitterUsername:true, displayName:true, image:true, bio:true, createdAt:true,diningTypes:{where:{diningType:{isActive:true}},orderBy:{diningType:{sortOrder:'asc'}},select:{diningType:{select:{id:true,slug:true,label:true}}}} } satisfies Prisma.UserSelect;
 export async function getCurrentUser(){const id=await currentUserId();return id?prisma.user.findUnique({where:{id},select:publicUser}):null;}
 export async function getDiningTypes(){return prisma.diningType.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{label:'asc'}],select:{id:true,slug:true,label:true}});}
 export async function getMealPurposes(){return prisma.mealPurpose.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{label:'asc'}],select:{id:true,slug:true,label:true}});}
-export async function getMealList(input: unknown = {}) {
+function whenWhere(when: string | undefined): Prisma.MealWhereInput {
+  if (!when) return {};
+  const now = new Date();
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
+  if (when === 'today') return { candidates: { some: { date: { gte: todayStart, lt: todayEnd } } } };
+  if (when === 'tonight') return { candidates: { some: { date: { gte: todayStart, lt: todayEnd }, startTime: { gte: '18:00' } } } };
+  if (when === 'soon') return { candidates: { some: { date: { gte: todayStart, lt: todayEnd } } } };
+  return {};
+}
+
+function withinHours(meal: { candidates: { date: Date; startTime: string }[] }, hours: number, now: Date) {
+  return meal.candidates.some(c => {
+    const [h, m] = c.startTime.split(':').map(Number);
+    const at = new Date(c.date); at.setHours(h, m, 0, 0);
+    const diffH = (at.getTime() - now.getTime()) / (1000 * 60 * 60);
+    return diffH >= 0 && diffH <= hours;
+  });
+}
+
+export async function getMealList(input: unknown = {}, context: RankingContext = {}) {
   const parsed=filterSchema.safeParse(input); const filters=parsed.success?parsed.data:{};
   if(!process.env.DATABASE_URL) return [];
-  const where: Prisma.MealWhereInput={status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}],...(filters.area?{area:{contains:filters.area,mode:'insensitive'}}:{}),...(filters.paymentType?{paymentType:filters.paymentType}:{}),...(typeof filters.budget==='number'?{budgetMax:{lte:filters.budget}}:{}),...(filters.date?{candidates:{some:{date:new Date(filters.date)}}}:{}),...(filters.purpose?{purposes:{some:{purpose:{slug:filters.purpose,isActive:true}}}}:{})};
+  const where: Prisma.MealWhereInput={status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}],...(filters.area?{area:{contains:filters.area,mode:'insensitive'}}:{}),...(filters.paymentType?{paymentType:filters.paymentType}:{}),...(typeof filters.budget==='number'?{budgetMax:{lte:filters.budget}}:{}),...(filters.date?{candidates:{some:{date:new Date(filters.date)}}}:{}),...(filters.purpose?{purposes:{some:{purpose:{slug:filters.purpose,isActive:true}}}}:{}),...whenWhere(filters.when)};
   const meals=await prisma.meal.findMany({where,orderBy:{createdAt:'desc'},take:100,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
-  return meals.sort((a,b)=>{
-    const aRemaining=a.maxParticipants-(a._count.joinRequests+1),bRemaining=b.maxParticipants-(b._count.joinRequests+1);
-    const boost=Number(bRemaining===1)-Number(aRemaining===1);if(boost)return boost;
-    const aDate=a.candidates[0]?.date.getTime()??Number.MAX_SAFE_INTEGER,bDate=b.candidates[0]?.date.getTime()??Number.MAX_SAFE_INTEGER;
-    return aDate-bDate||b.createdAt.getTime()-a.createdAt.getTime();
-  });
+  const now=new Date();
+  const soonFiltered=filters.when==='soon'?meals.filter(meal=>withinHours(meal,3,now)):meals;
+  const remainingFiltered=filters.remaining?soonFiltered.filter(meal=>meal.maxParticipants-(meal._count.joinRequests+1)===filters.remaining):soonFiltered;
+  return rankMeals(remainingFiltered,{...context,now}).map(r=>r.meal);
 }
 export async function getRecentOpenMeals(limit=4){
   if(!process.env.DATABASE_URL) return [];
   return prisma.meal.findMany({where:{status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}]},orderBy:{createdAt:'desc'},take:limit,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
+}
+export async function getMealsByIds(ids: string[]){
+  if(!process.env.DATABASE_URL || ids.length===0) return [];
+  const safeIds=ids.filter(id=>idSchema.safeParse(id).success).slice(0,20);
+  if(!safeIds.length) return [];
+  const meals=await prisma.meal.findMany({where:{id:{in:safeIds},status:'OPEN'},include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
+  const order=new Map(safeIds.map((id,index)=>[id,index]));
+  return meals.sort((a,b)=>(order.get(a.id)??0)-(order.get(b.id)??0));
+}
+export async function getUserPreferences(userId: string){
+  const user=await prisma.user.findUnique({where:{id:userId},select:{preferredArea:true,preferredGenres:true}});
+  return {preferredArea:user?.preferredArea??null,preferredGenres:user?.preferredGenres??[]};
+}
+export async function getHostTrustStats(hostId: string){
+  if(!process.env.DATABASE_URL) return {hostedCount:0,completedCount:0};
+  const [hostedCount,completedCount]=await Promise.all([
+    prisma.meal.count({where:{hostId,status:{in:['OPEN','MATCHED','CLOSED']}}}),
+    prisma.match.count({where:{status:'COMPLETED',meal:{hostId}}}),
+  ]);
+  return {hostedCount,completedCount};
+}
+export async function getFavoriteMealIds(userId: string){
+  if(!process.env.DATABASE_URL) return [];
+  const favorites=await prisma.favorite.findMany({where:{userId},select:{mealId:true},orderBy:{createdAt:'desc'}});
+  return favorites.map(f=>f.mealId);
 }
 export async function getMealById(raw: string){
   const id=idSchema.safeParse(raw); if(!id.success || !process.env.DATABASE_URL)return null;
@@ -61,7 +105,7 @@ export async function getMyPageData(){
     prisma.businessMember.findFirst({where:{userId,OR:[{role:{in:['OWNER','ADMIN']}},{canPostToSocial:true}]},select:{businessAccount:{select:{name:true}}}}),
     prisma.user.findUnique({where:{id:userId},select:{isAdmin:true,onboardingCompletedAt:true}})
   ]);
-  return {hostedMeals,joinRequests,matches,businessMembership,isAdmin:currentUser?.isAdmin??false,onboardingCompletedAt:currentUser?.onboardingCompletedAt??null,completedMatches:matches.filter(m=>m.status==='COMPLETED')};
+  return {userId,hostedMeals,joinRequests,matches,businessMembership,isAdmin:currentUser?.isAdmin??false,onboardingCompletedAt:currentUser?.onboardingCompletedAt??null,completedMatches:matches.filter(m=>m.status==='COMPLETED')};
 }
 export async function getMatchById(raw: string){
   const userId=await requirePageUser(); const id=idSchema.safeParse(raw);if(!id.success)return null;
