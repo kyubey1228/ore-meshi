@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getAreaGenreDashboard, getOpportunityRanking, getSalesSummary, MIN_BUSINESS_SAMPLE_SIZE } from '@/server/business-intelligence';
 import { getAcquisitionDashboard, getCampaignDashboard } from '@/server/acquisition';
+import { getMonetizationSummary } from '@/server/monetization';
 import { measurePerformance } from '@/lib/performance';
 
 export const metadata = { title: 'Business Dashboard' };
@@ -12,12 +13,13 @@ function percent(n: number) { return `${Math.round(n * 100)}%`; }
 export default async function BusinessDashboard({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const { days: rawDays } = await searchParams;
   const days = PERIODS.includes(Number(rawDays)) ? Number(rawDays) : 30;
-  const [areaGenre, opportunity, salesSummary, acquisition, campaigns] = await measurePerformance('ADMIN', 'business dashboard aggregates', () => Promise.all([
+  const [areaGenre, opportunity, salesSummary, acquisition, campaigns, monetization] = await measurePerformance('ADMIN', 'business dashboard aggregates', () => Promise.all([
     getAreaGenreDashboard(days),
     getOpportunityRanking(days),
     getSalesSummary(days),
     getAcquisitionDashboard(days),
     getCampaignDashboard(days),
+    getMonetizationSummary(days),
   ]));
 
   return (
@@ -33,6 +35,24 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
         <Link className="text-link" href="/admin/leads">営業Lead管理へ →</Link>
       </div>
       <p className="muted">店舗営業・スポンサー営業に使えるデータのみを表示しています。個人のメールアドレス・食事履歴・個別のDemand Intent所有者は一切表示しません。n＜{MIN_BUSINESS_SAMPLE_SIZE}の集計は「データ不足」として抑制しています。</p>
+
+      <div className="panel">
+        <h2>収益サマリー（過去{days}日）</h2>
+        <div className="analytics-grid">
+          <div><strong>{monetization.sponsoredMealOrders}</strong><span>スポンサー飯 購入件数</span></div>
+          <div><strong>{monetization.seatCampaignOrders}</strong><span>空席スポンサー 購入件数</span></div>
+          <div><strong>{monetization.areaSponsorshipOrders}</strong><span>エリアスポンサー 購入件数</span></div>
+          <div><strong>¥{Math.round(monetization.oneTimeRevenue).toLocaleString('ja-JP')}</strong><span>単発売上（スポンサー総売上）</span></div>
+          <div><strong>{monetization.mrr === null ? 'データ不足' : `¥${Math.round(monetization.mrr).toLocaleString('ja-JP')}`}</strong><span>MRR（概算）</span></div>
+          <div><strong>{monetization.subscriptionCounts.FREE}</strong><span>FREEプラン（概算）</span></div>
+          <div><strong>{monetization.subscriptionCounts.STANDARD}</strong><span>STANDARDプラン</span></div>
+          <div><strong>{monetization.subscriptionCounts.PRO}</strong><span>PROプラン</span></div>
+          <div><strong>{monetization.checkoutStarted}</strong><span>Checkout開始</span></div>
+          <div><strong>{monetization.checkoutCompleted}</strong><span>Checkout完了</span></div>
+          <div><strong>{percent(monetization.checkoutConversionRate)}</strong><span>Checkout Conversion Rate</span></div>
+        </div>
+        <p className="muted">MRRはキャッシュ済みのStripe価格 × 有効なSTANDARD/PRO契約数の概算値です（日割り・管理者による手動プラン付与は考慮していません）。FREEプラン数は有効な店舗数からSTANDARD/PRO契約数を差し引いた概算値です。単発売上はSponsorOrder（決済確定済みのみ）の実額合計で、Stripe APIを毎回呼び出さずDB内の記録から算出しています。</p>
+      </div>
 
       <div className="panel">
         <h2>集客Overview</h2>
