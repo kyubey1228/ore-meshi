@@ -18,6 +18,8 @@ export type GrowthEventData = {
   shareType?: string;
   notificationType?: string;
   channel?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
   metadata?: Prisma.InputJsonValue;
 };
 

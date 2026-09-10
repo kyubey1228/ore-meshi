@@ -81,7 +81,10 @@ export const authOptions: NextAuthOptions = {
       });
 
       if (!existing) {
-        await recordGrowthEvent('SIGNUP_COMPLETED', { userId: user.id, loggedIn: true });
+        const utmCookie = (await cookies()).get('ore_utm')?.value;
+        let utm: { source?: string; utmMedium?: string; utmCampaign?: string } = {};
+        if (utmCookie) { try { utm = JSON.parse(decodeURIComponent(utmCookie)); } catch { /* noop */ } }
+        await recordGrowthEvent('SIGNUP_COMPLETED', { userId: user.id, loggedIn: true, source: utm.source, utmMedium: utm.utmMedium, utmCampaign: utm.utmCampaign });
         const referralCode = (await cookies()).get(REFERRAL_COOKIE)?.value;
         if (referralCode) {
           const referral = await prisma.referral.findFirst({ where: { referralCode, referredUserId: null }, orderBy: { createdAt: 'desc' } });

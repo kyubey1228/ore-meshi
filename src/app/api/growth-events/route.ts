@@ -20,12 +20,16 @@ const schema = z.object({
   variant: z.string().trim().max(20).optional(),
   notificationType: z.string().trim().max(40).optional(),
   channel: z.string().trim().max(20).optional(),
+  utmMedium: z.string().trim().max(60).optional(),
+  utmCampaign: z.string().trim().max(80).optional(),
+  utmContent: z.string().trim().max(80).optional(),
+  utmTerm: z.string().trim().max(80).optional(),
 });
 
 export async function POST(request: Request) {
   try {
-    const { rankingPosition, recommendationReason, personalizationEnabled, experimentName, variant, notificationType, channel, ...data } = schema.parse(await request.json());
-    const metadataEntries = { rankingPosition, recommendationReason, personalizationEnabled, experimentName, variant, notificationType, channel };
+    const { rankingPosition, recommendationReason, personalizationEnabled, experimentName, variant, notificationType, channel, utmContent, utmTerm, ...data } = schema.parse(await request.json());
+    const metadataEntries = { rankingPosition, recommendationReason, personalizationEnabled, experimentName, variant, notificationType, channel, utmContent, utmTerm };
     const hasMetadata = Object.values(metadataEntries).some(v => v !== undefined);
     const cookie = request.headers.get('cookie') ?? '';
     const existing = cookie.match(/(?:^|; )ore_growth_session=([^;]+)/)?.[1];
