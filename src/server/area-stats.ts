@@ -31,3 +31,10 @@ export async function getTopAreas(limit = 5) {
   const rows = await prisma.meal.groupBy({ by: ['area'], where: { status: { in: ['OPEN', 'MATCHED'] } }, _count: { _all: true }, orderBy: { _count: { area: 'desc' } }, take: limit });
   return rows.map(row => ({ area: row.area, count: row._count._all }));
 }
+
+// 「今、人が集まりやすいエリア」= 単純な登録者数/募集数順ではなく、実際に成立した実績(completedMeals30d)を優先する。
+export async function getPopularAreas(limit = 5) {
+  const candidates = await getTopAreas(limit * 2);
+  const withStats = await Promise.all(candidates.map(async c => ({ area: c.area, ...(await getAreaStats(c.area)) })));
+  return withStats.filter(a => a.completedMeals30d > 0).sort((a, b) => b.completedMeals30d - a.completedMeals30d).slice(0, limit);
+}
