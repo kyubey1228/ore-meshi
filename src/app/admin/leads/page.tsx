@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getAdminLeads, getSalesFunnel } from '@/server/admin';
 import { updateLeadStatus } from '@/server/actions/admin-leads';
 import { InlineStatusForm } from '@/components/inline-status-form';
+import { dateLabel } from '@/lib/format';
 
 const labels = { NEW: '新規', CONTACTED: '連絡済み', QUALIFIED: '商談中', WON: '成約', LOST: '失注', ARCHIVED: '保管' } as const;
 const STATUS_OPTIONS = Object.keys(labels) as (keyof typeof labels)[];
@@ -48,7 +49,7 @@ export default async function Leads() {
                   <td>
                     <InlineStatusForm id={l.id} currentStatus={l.status} options={STATUS_OPTIONS} labels={labels} action={updateLeadStatus} extraFields={{ returnTo: 'list' }} />
                   </td>
-                  <td>{l.createdAt.toLocaleDateString('ja-JP')}</td>
+                  <td>{dateLabel(l.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
