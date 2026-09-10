@@ -147,6 +147,10 @@ enum BusinessMarketingEventType {
   SIGNUP_COMPLETED
   CHECKOUT_STARTED
   CHECKOUT_COMPLETED
+  SPONSOR_PRODUCT_VIEW
+  SPONSORED_MEAL_ACTIVATED
+  SEAT_CAMPAIGN_ACTIVATED
+  SUBSCRIPTION_STARTED
 }
 
 enum BusinessPlan {
@@ -232,7 +236,14 @@ enum ReferralEventType {
   MEAL_CREATED
   JOIN_REQUEST
   MATCHED
+  COMPLETED
   COUPON_REDEEMED
+}
+
+enum AnalyticsSnapshotType {
+  GROWTH_DASHBOARD
+  BUSINESS_DASHBOARD
+  GROWTH_INSIGHTS
 }
 
 model User {
@@ -313,6 +324,7 @@ model BusinessAccount {
   referralReceived   BusinessReferral?           @relation("BusinessReferralReferred")
   partnerMemberships PartnerCampaignMember[]
   marketingEvents    BusinessMarketingEvent[]
+  areaSponsorships   AreaSponsorship[]
 }
 
 model BusinessLead {
@@ -652,6 +664,105 @@ model NotificationPreference {
   user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model AnalyticsSnapshot {
+  id            String                @id @default(cuid())
+  snapshotType  AnalyticsSnapshotType
+  asOfDate      DateTime              @db.Date
+  windowDays    Int
+  timezone      String                @default("Asia/Tokyo")
+  periodStart   DateTime
+  periodEnd     DateTime
+  schemaVersion Int                   @default(1)
+  payload       Json
+  generatedAt   DateTime
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([snapshotType, asOfDate, windowDays, schemaVersion])
+  @@index([snapshotType, generatedAt])
+}
+
+model DailyMetrics {
+  id                       String   @id @default(cuid())
+  date                     DateTime @db.Date
+  timezone                 String   @default("Asia/Tokyo")
+  periodStart              DateTime
+  periodEnd                DateTime
+  signupStarted            Int      @default(0)
+  signupCompleted          Int      @default(0)
+  joinIntentCreated        Int      @default(0)
+  joinAfterSignupCompleted Int      @default(0)
+  recruitmentShareX        Int      @default(0)
+  recruitmentShareLine     Int      @default(0)
+  recruitmentUrlCopied     Int      @default(0)
+  referralOpened           Int      @default(0)
+  referralSignupCompleted  Int      @default(0)
+  quickPostStarted         Int      @default(0)
+  quickPostCompleted       Int      @default(0)
+  mealsCreated             Int      @default(0)
+  mealsMatched             Int      @default(0)
+  matchesCompleted         Int      @default(0)
+  uniqueDiners             Int      @default(0)
+  demandIntentsCreated     Int      @default(0)
+  demandIntentsMatched     Int      @default(0)
+  demandRecruitments       Int      @default(0)
+  demandMealsMatched       Int      @default(0)
+  notificationsSent        Int      @default(0)
+  notificationsOpened      Int      @default(0)
+  notificationsClicked     Int      @default(0)
+  notificationTypeMetrics  Json     @default("{}")
+  generatedAt              DateTime
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@unique([date, timezone])
+  @@index([date])
+}
+
+model AreaDemandStats {
+  id                    String   @id @default(cuid())
+  date                  DateTime @db.Date
+  timezone              String   @default("Asia/Tokyo")
+  periodStart           DateTime
+  periodEnd             DateTime
+  area                  String
+  genre                 String   @default("未指定")
+  demandIntents         Int      @default(0)
+  mealsCreated          Int      @default(0)
+  mealsMatched          Int      @default(0)
+  matchesCompleted      Int      @default(0)
+  estimatedParticipants Int      @default(0)
+  generatedAt           DateTime
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([date, timezone, area, genre])
+  @@index([area, date])
+  @@index([area, genre, date])
+}
+
+model HourlyDemandStats {
+  id               String   @id @default(cuid())
+  bucketStart      DateTime
+  timezone         String   @default("Asia/Tokyo")
+  localDate        DateTime @db.Date
+  localWeekday     Int
+  localHour        Int
+  area             String
+  genre            String   @default("未指定")
+  demandIntents    Int      @default(0)
+  mealsCreated     Int      @default(0)
+  mealsMatched     Int      @default(0)
+  matchesCompleted Int      @default(0)
+  generatedAt      DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([bucketStart, timezone, area, genre])
+  @@index([localDate, area])
+  @@index([localWeekday, localHour, area, genre])
+}
+
 enum DemandIntentStatus {
   ACTIVE
   MATCHED
@@ -733,6 +844,25 @@ model SponsorOrder {
 
   @@index([businessAccountId, createdAt])
   @@index([orderType, campaignId, status])
+}
+
+// エリア×ジャンル単位の期間限定スポンサー掲載。既存のSponsorOrder/OrderType.AREA_FEATURED/
+// STRIPE_PRICE_AREA_FEATURED(既存のconfig.tsで定義済み)をそのまま再利用する。
+model AreaSponsorship {
+  id                String                 @id @default(cuid())
+  businessAccountId String
+  area              String
+  genre             String?
+  startsAt          DateTime
+  endsAt            DateTime
+  status            BusinessCampaignStatus @default(DRAFT)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  businessAccount   BusinessAccount        @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+
+  @@index([area, genre, status])
+  @@index([status, endsAt])
+  @@index([businessAccountId, createdAt])
 }
 
 model StripeWebhookEvent {
