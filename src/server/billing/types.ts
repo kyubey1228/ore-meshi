@@ -1,4 +1,5 @@
 import type { BusinessPlan, OrderType, SponsorOrderStatus, SubscriptionStatus } from '@prisma/client';
+export type { BusinessCapabilities } from '@/lib/business-capabilities';
 
 export type BillingPrice = {
   plan: Exclude<BusinessPlan, 'FREE'>;
@@ -7,21 +8,11 @@ export type BillingPrice = {
   currency: string;
   interval: string | null;
 };
-export type BusinessPricingCatalog = { sponsoredMeal:number; seatCampaign:number; FREE:0; STANDARD:number; PRO:number; currency:string };
+export type BusinessPricingCatalog = { sponsoredMeal:number; seatCampaign:number; areaSponsorship:number|null; FREE:0; STANDARD:number; PRO:number; currency:string };
 
 export type CheckoutResult =
   | { success: true; url: string }
   | { success: false; error: string };
-
-export type BusinessCapabilities = {
-  plan: BusinessPlan;
-  canPublishSponsoredMeal: boolean;
-  canCreateSeatCampaign: boolean;
-  canCreateDirectAd: boolean;
-  canViewAdvancedAnalytics: boolean;
-  canViewReferralAnalytics: boolean;
-  canManageMultipleLocations: boolean;
-};
 
 export type BusinessBillingState = {
   businessAccountId: string;
