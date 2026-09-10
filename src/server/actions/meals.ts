@@ -2,12 +2,15 @@
 import { z } from 'zod';
 import { mealSchema, idSchema } from '@/validators';
 import { perform, transaction, ensure } from '@/server/action';
+import { getReferralAttribution } from '@/server/business';
 export async function createMeal(input: unknown) { return perform(async userId => {
   const {candidates,deadline,purposeIds,...meal}=mealSchema.parse(input);
+  const attribution=await getReferralAttribution();
   return transaction(async tx=>{
     const activePurposes=await tx.mealPurpose.count({where:{id:{in:purposeIds},isActive:true}});
     ensure(activePurposes===new Set(purposeIds).size,'目的タグを選び直してください。');
     const result=await tx.meal.create({data:{...meal,deadline:deadline?new Date(deadline):null,hostId:userId,candidates:{create:candidates.map(c=>({...c,date:new Date(c.date)}))},purposes:{create:purposeIds.map(purposeId=>({purposeId}))}}});
+    if(attribution)await tx.referralEvent.create({data:{businessAccountId:attribution.businessAccountId,socialPostId:attribution.socialPostId,entityType:attribution.entityType,entityId:attribution.entityId,eventType:'MEAL_CREATED',sourceEventId:attribution.id,conversionEntityId:result.id,utmSource:attribution.utmSource,utmMedium:attribution.utmMedium,utmCampaign:attribution.utmCampaign,anonymousId:attribution.anonymousId}});
     return `/meals/${result.id}`;
   });
 }); }

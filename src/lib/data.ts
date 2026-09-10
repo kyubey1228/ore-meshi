@@ -42,12 +42,13 @@ export async function getUserProfileData(raw: string){
 }
 export async function getMyPageData(){
   const userId=await requirePageUser();
-  const [hostedMeals,joinRequests,matches]=await Promise.all([
+  const [hostedMeals,joinRequests,matches,businessMembership]=await Promise.all([
     prisma.meal.findMany({where:{hostId:userId},orderBy:{createdAt:'desc'},include:{host:{select:publicUser},candidates:true,_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}}),
     prisma.joinRequest.findMany({where:{userId,status:'PENDING'},orderBy:{createdAt:'desc'},include:{meal:true,candidate:true}}),
-    prisma.match.findMany({where:{participants:{some:{userId}}},orderBy:{scheduledAt:'desc'},include:{meal:true,participants:{include:{user:{select:publicUser}}}}})
+    prisma.match.findMany({where:{participants:{some:{userId}}},orderBy:{scheduledAt:'desc'},include:{meal:true,participants:{include:{user:{select:publicUser}}}}}),
+    prisma.businessMember.findFirst({where:{userId,OR:[{role:{in:['OWNER','ADMIN']}},{canPostToSocial:true}]},select:{businessAccount:{select:{name:true}}}})
   ]);
-  return {hostedMeals,joinRequests,matches,completedMatches:matches.filter(m=>m.status==='COMPLETED')};
+  return {hostedMeals,joinRequests,matches,businessMembership,completedMatches:matches.filter(m=>m.status==='COMPLETED')};
 }
 export async function getMatchById(raw: string){
   const userId=await requirePageUser(); const id=idSchema.safeParse(raw);if(!id.success)return null;

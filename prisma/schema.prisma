@@ -54,6 +54,66 @@ enum AttendanceStatus {
   NO_SHOW
 }
 
+enum BusinessMemberRole {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum BusinessCampaignStatus {
+  DRAFT
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum SocialProvider {
+  X
+}
+
+enum SocialConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  REVOKED
+}
+
+enum SocialEntityType {
+  SPONSORED_MEAL
+  SPONSOR_CAMPAIGN
+  SEAT_CAMPAIGN
+  COUPON
+  DIRECT_AD_CAMPAIGN
+}
+
+enum SocialPostStatus {
+  PENDING
+  POSTED
+  FAILED
+  CANCELLED
+}
+
+enum SocialPostType {
+  SPONSORED_MEAL
+  SEAT_CAMPAIGN
+  CANCELLATION_SLOT
+  LAST_SEAT
+  COUPON
+  DIRECT_AD
+}
+
+enum SocialShareMode {
+  MANUAL
+  AUTOMATIC
+}
+
+enum ReferralEventType {
+  X_VISIT
+  MEAL_CREATED
+  JOIN_REQUEST
+  MATCHED
+  COUPON_REDEEMED
+}
+
 model User {
   id              String    @id @default(cuid())
   email           String?   @unique
@@ -76,8 +136,213 @@ model User {
   diningFeedbackSent     DiningFeedback[]     @relation("DiningFeedbackFrom")
   diningFeedbackReceived DiningFeedback[]     @relation("DiningFeedbackTo")
   diningTypes            UserDiningType[]
+  businessMemberships    BusinessMember[]
 
   @@index([twitterUsername])
+}
+
+model BusinessAccount {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  area      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members            BusinessMember[]
+  sponsoredMeals     SponsoredMeal[]
+  sponsorCampaigns   SponsorCampaign[]
+  seatCampaigns      SeatCampaign[]
+  coupons            Coupon[]
+  directAdCampaigns  DirectAdCampaign[]
+  socialAccounts     BusinessSocialAccount[]
+  socialPostSettings BusinessSocialPostSetting[]
+  socialPosts        SocialPost[]
+  referralEvents     ReferralEvent[]
+}
+
+model BusinessMember {
+  businessAccountId String
+  userId            String
+  role              BusinessMemberRole @default(STAFF)
+  canPostToSocial   Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  businessAccount   BusinessAccount    @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([businessAccountId, userId])
+  @@index([userId])
+}
+
+model SponsoredMeal {
+  id                String                 @id @default(cuid())
+  businessAccountId String
+  mealId            String?
+  title             String
+  sponsorName       String
+  restaurantName    String
+  area              String
+  startsAt          DateTime
+  participantLimit  Int
+  remainingSlots    Int
+  benefit           String
+  status            BusinessCampaignStatus @default(DRAFT)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  businessAccount   BusinessAccount        @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  meal              Meal?                  @relation(fields: [mealId], references: [id], onDelete: SetNull)
+
+  @@index([businessAccountId, status, startsAt])
+  @@index([mealId])
+}
+
+model SponsorCampaign {
+  id                String                 @id @default(cuid())
+  businessAccountId String
+  title             String
+  sponsorName       String
+  restaurantName    String
+  area              String
+  startsAt          DateTime
+  participantLimit  Int
+  remainingSlots    Int
+  benefit           String
+  status            BusinessCampaignStatus @default(DRAFT)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  businessAccount   BusinessAccount        @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+
+  @@index([businessAccountId, status, startsAt])
+}
+
+model SeatCampaign {
+  id                String                 @id @default(cuid())
+  businessAccountId String
+  restaurantName    String
+  area              String
+  remainingSeats    Int
+  endsAt            DateTime
+  benefit           String
+  status            BusinessCampaignStatus @default(DRAFT)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  businessAccount   BusinessAccount        @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+
+  @@index([businessAccountId, status, endsAt])
+}
+
+model Coupon {
+  id                String                 @id @default(cuid())
+  businessAccountId String
+  title             String
+  restaurantName    String
+  area              String
+  benefit           String
+  expiresAt         DateTime
+  status            BusinessCampaignStatus @default(DRAFT)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  businessAccount   BusinessAccount        @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+
+  @@index([businessAccountId, status, expiresAt])
+}
+
+model DirectAdCampaign {
+  id                String                 @id @default(cuid())
+  businessAccountId String
+  title             String
+  advertiserName    String
+  description       String
+  startsAt          DateTime
+  endsAt            DateTime
+  status            BusinessCampaignStatus @default(DRAFT)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  businessAccount   BusinessAccount        @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+
+  @@index([businessAccountId, status, endsAt])
+}
+
+model BusinessSocialAccount {
+  id                String                      @id @default(cuid())
+  businessAccountId String
+  provider          SocialProvider
+  providerAccountId String
+  username          String
+  displayName       String
+  profileImageUrl   String?
+  status            SocialConnectionStatus      @default(DISCONNECTED)
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  businessAccount   BusinessAccount             @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  settings          BusinessSocialPostSetting[]
+  posts             SocialPost[]
+
+  @@unique([provider, providerAccountId])
+  @@index([businessAccountId, status])
+}
+
+model BusinessSocialPostSetting {
+  id                       String                 @id @default(cuid())
+  businessAccountId        String
+  socialAccountId          String?
+  autoPostSponsoredMeal    Boolean                @default(false)
+  autoPostSeatCampaign     Boolean                @default(false)
+  autoPostCancellationSlot Boolean                @default(false)
+  autoPostLastSeat         Boolean                @default(false)
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  businessAccount          BusinessAccount        @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  socialAccount            BusinessSocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([businessAccountId])
+  @@index([socialAccountId])
+}
+
+model SocialPost {
+  id                String                 @id @default(cuid())
+  businessAccountId String
+  socialAccountId   String?
+  entityType        SocialEntityType
+  entityId          String
+  postType          SocialPostType
+  status            SocialPostStatus       @default(PENDING)
+  shareMode         SocialShareMode        @default(MANUAL)
+  idempotencyKey    String                 @unique
+  externalPostId    String?
+  postedAt          DateTime?
+  errorMessage      String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  businessAccount   BusinessAccount        @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  socialAccount     BusinessSocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  referralEvents    ReferralEvent[]
+
+  @@index([businessAccountId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model ReferralEvent {
+  id                 String            @id @default(cuid())
+  businessAccountId  String
+  socialPostId       String?
+  entityType         SocialEntityType?
+  entityId           String?
+  eventType          ReferralEventType
+  sourceEventId      String?
+  conversionEntityId String?
+  utmSource          String?
+  utmMedium          String?
+  utmCampaign        String?
+  anonymousId        String?
+  createdAt          DateTime          @default(now())
+  businessAccount    BusinessAccount   @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  socialPost         SocialPost?       @relation(fields: [socialPostId], references: [id], onDelete: SetNull)
+
+  @@index([businessAccountId, eventType, createdAt])
+  @@index([socialPostId, eventType])
+  @@index([sourceEventId])
+  @@index([conversionEntityId])
 }
 
 model Account {
@@ -137,11 +402,12 @@ model Meal {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  host         User                  @relation("MealHost", fields: [hostId], references: [id], onDelete: Cascade)
-  candidates   MealCandidate[]
-  joinRequests JoinRequest[]
-  matches      Match[]
-  purposes     MealPurposeRelation[]
+  host           User                  @relation("MealHost", fields: [hostId], references: [id], onDelete: Cascade)
+  candidates     MealCandidate[]
+  joinRequests   JoinRequest[]
+  matches        Match[]
+  purposes       MealPurposeRelation[]
+  sponsoredMeals SponsoredMeal[]
 
   @@index([hostId, createdAt])
   @@index([status, area, createdAt])

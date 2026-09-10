@@ -2,8 +2,10 @@
 import { z } from 'zod';
 import { idSchema, joinSchema, scheduledAt } from '@/validators';
 import { perform, transaction, ensure } from '@/server/action';
+import { getReferralAttribution } from '@/server/business';
 export async function createJoinRequest(input: unknown) {return perform(async userId=>{
   const data=joinSchema.parse(input);
+  const attribution=await getReferralAttribution();
   await transaction(async tx=>{
     const meal=await tx.meal.findUnique({where:{id:data.mealId},include:{candidates:true,matches:true}});
     ensure(meal && meal.status==='OPEN','その飯はもう募集が終わっています。');
@@ -14,7 +16,8 @@ export async function createJoinRequest(input: unknown) {return perform(async us
     ensure(scheduledAt(candidate.date.toISOString().slice(0,10),candidate.startTime)>new Date(),'この候補日時は過ぎています。');
     ensure(!meal.matches[0] || (meal.matches[0].status==='ACTIVE' && meal.matches[0].candidateId===candidate.id),'飯の日程が決まりました。確定した候補日時を選んでください。');
     ensure(!await tx.joinRequest.findUnique({where:{mealId_userId:{mealId:data.mealId,userId}}}),'すでにこの飯に参加希望を送っています。');
-    await tx.joinRequest.create({data:{...data,userId}});
+    const request=await tx.joinRequest.create({data:{...data,userId}});
+    if(attribution)await tx.referralEvent.create({data:{businessAccountId:attribution.businessAccountId,socialPostId:attribution.socialPostId,entityType:attribution.entityType,entityId:attribution.entityId,eventType:'JOIN_REQUEST',sourceEventId:attribution.id,conversionEntityId:request.id,utmSource:attribution.utmSource,utmMedium:attribution.utmMedium,utmCampaign:attribution.utmCampaign,anonymousId:attribution.anonymousId}});
   });
 });}
 export async function cancelJoinRequest(input: unknown) {return perform(async userId=>{
@@ -40,7 +43,11 @@ export async function decideJoinRequest(input: unknown) {return perform(async us
     const participantCount=await tx.matchParticipant.count({where:{matchId:match.id}});
     ensure(participantCount<=meal.maxParticipants,'その枠は埋まりました。');
     const full=participantCount===meal.maxParticipants;
-    if(full) await tx.meal.update({where:{id:mealId},data:{status:'MATCHED'}});
+    if(full){
+      await tx.meal.update({where:{id:mealId},data:{status:'MATCHED'}});
+      const attribution=await tx.referralEvent.findFirst({where:{eventType:'JOIN_REQUEST',conversionEntityId:request.id},orderBy:{createdAt:'desc'}});
+      if(attribution)await tx.referralEvent.create({data:{businessAccountId:attribution.businessAccountId,socialPostId:attribution.socialPostId,entityType:attribution.entityType,entityId:attribution.entityId,eventType:'MATCHED',sourceEventId:attribution.id,conversionEntityId:match.id,utmSource:attribution.utmSource,utmMedium:attribution.utmMedium,utmCampaign:attribution.utmCampaign,anonymousId:attribution.anonymousId}});
+    }
     await tx.joinRequest.updateMany({where:{mealId,status:'PENDING',...(full?{}:{candidateId:{not:request.candidateId}})},data:{status:'REJECTED'}});
     return {href:`/matches/${match.id}`,justMatched:full,matchId:match.id,meal:{title:meal.title,area:meal.area,scheduledAt:start.toISOString(),participantCount}};
   });

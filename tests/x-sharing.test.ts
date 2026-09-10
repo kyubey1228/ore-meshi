@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { buildTrackedCampaignUrl, generateCampaignPost, isCampaignShareable, type CampaignShareData } from '../src/features/x-sharing/templates';
+const base:CampaignShareData={id:'campaign-1',kind:'SPONSORED_MEAL',businessAccountId:'business-1',businessName:'飯スポンサー株式会社',title:'新宿で焼肉',restaurantName:'焼肉だれか屋',area:'新宿',startsAt:new Date('2026-09-15T10:00:00.000Z'),participantLimit:4,remaining:2,benefit:'1人1000円分おごり',status:'ACTIVE'};
+test('店舗X共有URLに計測パラメータを付ける',()=>{const url=new URL(buildTrackedCampaignUrl('https://example.com',base,'SPONSORED_MEAL','11111111-1111-4111-8111-111111111111'));assert.equal(url.searchParams.get('utm_source'),'x');assert.equal(url.searchParams.get('ref'),'11111111-1111-4111-8111-111111111111');});
+test('スポンサー飯の投稿にはPR・店舗・特典・残席を含む',()=>{const text=generateCampaignPost(base,'https://example.com/campaign','SPONSORED_MEAL');for(const value of ['PR','焼肉だれか屋','1人1000円分おごり','あと2人','#誰か飯いこ'])assert.match(text,new RegExp(value));});
+test('残り1席は専用テンプレートになる',()=>assert.match(generateCampaignPost({...base,remaining:1},'https://example.com/campaign','LAST_SEAT'),/あと1人で飯決定/));
+test('長いコメントでも投稿本文を280文字以内に収める',()=>assert.ok(generateCampaignPost({...base,description:'長'.repeat(500)},'https://example.com/campaign','DIRECT_AD','追'.repeat(100)).length<=280));
+test('各キャンペーン用テンプレートを生成する',()=>{assert.match(generateCampaignPost({...base,kind:'SEAT_CAMPAIGN',endsAt:new Date('2026-09-15T13:00:00Z')},'https://example.com','SEAT_CAMPAIGN'),/席空いてます/);assert.match(generateCampaignPost({...base,kind:'COUPON',endsAt:new Date('2026-09-15T13:00:00Z')},'https://example.com','COUPON'),/俺は誰かと飯が食いたい/);assert.match(generateCampaignPost(base,'https://example.com','CANCELLATION_SLOT'),/1席空きました/);});
+test('時間切れの空席キャンペーンは共有不可',()=>assert.equal(isCampaignShareable({...base,kind:'SEAT_CAMPAIGN',endsAt:new Date('2026-09-01T00:00:00Z')},new Date('2026-09-10T00:00:00Z')),false));
