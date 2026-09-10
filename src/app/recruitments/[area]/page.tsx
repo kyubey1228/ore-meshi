@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getMealList } from '@/lib/data';
 import { currentUserId } from '@/server/auth';
+import { getAreaStats } from '@/server/area-stats';
 import { MealCard } from '@/components/meal-card';
 import { TrackedLink } from '@/components/growth-tracker';
 import { appUrl } from '@/lib/social';
@@ -19,8 +20,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function RecruitmentsByArea({ params }: Props) {
   const { area } = await params;
   const decoded = decodeURIComponent(area);
-  const [meals, userId] = await Promise.all([getMealList({ area: decoded }), currentUserId()]);
+  const [meals, userId, stats] = await Promise.all([getMealList({ area: decoded }), currentUserId(), getAreaStats(decoded)]);
   const createHref = userId ? '/meals/new' : `/login?next=${encodeURIComponent('/meals/new')}`;
+  const hasMeaningfulStats = stats.completedMeals30d >= 2 || stats.activeMeals >= 2;
 
   return (
     <section className="section">
@@ -32,6 +34,13 @@ export default async function RecruitmentsByArea({ params }: Props) {
         </div>
         <TrackedLink className="btn secondary" eventType="RECRUITMENT_CREATE_CLICKED" payload={{ area: decoded, loggedIn: Boolean(userId), source: 'area_landing' }} href={createHref}>飯相手を募集する</TrackedLink>
       </div>
+      {hasMeaningfulStats && (
+        <div className="analytics-grid">
+          <div><strong>{stats.activeMeals}</strong><span>現在募集中</span></div>
+          <div><strong>{stats.completedMeals30d}</strong><span>過去30日の成立数</span></div>
+          {stats.participantsThisWeek > 0 && <div><strong>{stats.participantsThisWeek}</strong><span>今週の参加予定人数</span></div>}
+        </div>
+      )}
       {meals.length ? (
         <div className="meal-grid">{meals.map(meal => <MealCard key={meal.id} meal={meal} />)}</div>
       ) : (
