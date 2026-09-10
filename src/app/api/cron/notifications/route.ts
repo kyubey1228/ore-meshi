@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/server/notifications';
+import { recordGrowthEvent } from '@/server/growth';
 
 // JST基準の「今日の終わり」を絶対時刻として求める(サーバーのローカルTZに依存しないようIntlで算出)。
 function jstEndOfTodayUTC(now: Date): Date {
@@ -42,6 +43,19 @@ export async function GET(request: Request) {
     for (const p of match.participants) {
       if (await createNotification({ userId: p.userId, type: 'MEAL_STARTING_SOON', title: 'まもなく開催です', body: `「${match.meal.title}」がまもなく始まります。`, mealId: match.mealId, dedupeKey: `MEAL_STARTING_SOON:${match.id}:${p.userId}` })) sent++;
     }
+  }
+
+  // 開催予定を過ぎてもまだCOMPLETED/CANCELLEDになっていないMatchに、開催確認を1回だけ送る(予定時刻+2時間後から)。
+  const in2hAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const awaitingCompletion = await prisma.match.findMany({ where: { status: 'ACTIVE', scheduledAt: { lte: in2hAgo, gte: sevenDaysAgo } }, include: { meal: true, participants: true } });
+  for (const match of awaitingCompletion) {
+    let askedAnyone = false;
+    for (const p of match.participants) {
+      const created = await createNotification({ userId: p.userId, type: 'MEAL_COMPLETION_CHECK', title: 'この飯、開催されましたか？', body: `「${match.meal.title}」の開催結果を教えてください。`, mealId: match.mealId, dedupeKey: `MEAL_COMPLETION_CHECK:${match.id}:${p.userId}` });
+      if (created) { sent++; askedAnyone = true; }
+    }
+    if (askedAnyone) await recordGrowthEvent('MEAL_COMPLETION_CONFIRMATION_REQUESTED', { recruitmentId: match.mealId, area: match.meal.area, loggedIn: true });
   }
 
   const expired = await prisma.demandIntent.updateMany({ where: { status: 'ACTIVE', expiresAt: { lt: now } }, data: { status: 'EXPIRED' } });
