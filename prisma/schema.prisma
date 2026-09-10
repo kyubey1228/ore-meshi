@@ -236,63 +236,63 @@ enum ReferralEventType {
 }
 
 model User {
-  id              String    @id @default(cuid())
-  email           String?   @unique
-  emailVerified   DateTime?
-  twitterId       String    @unique
-  twitterUsername String
-  displayName     String
-  image           String?
-  bio             String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  isAdmin         Boolean   @default(false)
+  id                    String    @id @default(cuid())
+  email                 String?   @unique
+  emailVerified         DateTime?
+  twitterId             String    @unique
+  twitterUsername       String
+  displayName           String
+  image                 String?
+  bio                   String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  isAdmin               Boolean   @default(false)
   preferredArea         String?
-  preferredGenres       String[] @default([])
+  preferredGenres       String[]  @default([])
   onboardingCompletedAt DateTime?
-  referralCode          String?    @unique
+  referralCode          String?   @unique
 
   favorites              Favorite[]
-  referralsGiven         Referral[]           @relation("ReferralReferrer")
-  referralsReceived      Referral[]           @relation("ReferralReferred")
+  referralsGiven         Referral[]                 @relation("ReferralReferrer")
+  referralsReceived      Referral[]                 @relation("ReferralReferred")
   notifications          Notification[]
   notificationPreference NotificationPreference?
   demandIntents          DemandIntent[]
   recommendationProfile  UserRecommendationProfile?
   accounts               Account[]
   sessions               Session[]
-  hostedMeals            Meal[]               @relation("MealHost")
+  hostedMeals            Meal[]                     @relation("MealHost")
   joinRequests           JoinRequest[]
   rescheduleVotes        RescheduleVote[]
   matchParticipants      MatchParticipant[]
-  rescheduleProposals    RescheduleProposal[] @relation("RescheduleProposer")
-  diningFeedbackSent     DiningFeedback[]     @relation("DiningFeedbackFrom")
-  diningFeedbackReceived DiningFeedback[]     @relation("DiningFeedbackTo")
+  rescheduleProposals    RescheduleProposal[]       @relation("RescheduleProposer")
+  diningFeedbackSent     DiningFeedback[]           @relation("DiningFeedbackFrom")
+  diningFeedbackReceived DiningFeedback[]           @relation("DiningFeedbackTo")
   diningTypes            UserDiningType[]
   businessMemberships    BusinessMember[]
   couponRedemptions      CouponRedemption[]
-  assignedBusinessLeads  BusinessLead[]     @relation("AssignedBusinessLead")
+  assignedBusinessLeads  BusinessLead[]             @relation("AssignedBusinessLead")
   businessLeadNotes      BusinessLeadNote[]
 
   @@index([twitterUsername])
 }
 
 model BusinessAccount {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  area      String?
-  legalName String?
-  businessType BusinessType @default(RESTAURANT)
-  contactName String?
+  id           String                @id @default(cuid())
+  name         String
+  slug         String                @unique
+  area         String?
+  legalName    String?
+  businessType BusinessType          @default(RESTAURANT)
+  contactName  String?
   contactEmail String?
-  websiteUrl String?
+  websiteUrl   String?
   consultation String?
-  purposes String[] @default([])
+  purposes     String[]              @default([])
   planOverride BusinessPlan?
-  status    BusinessAccountStatus @default(PENDING)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status       BusinessAccountStatus @default(PENDING)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
 
   members            BusinessMember[]
   sponsoredMeals     SponsoredMeal[]
@@ -309,14 +309,14 @@ model BusinessAccount {
   sponsorOrders      SponsorOrder[]
   couponRedemptions  CouponRedemption[]
   convertedLeads     BusinessLead[]
-  referralsSent      BusinessReferral[] @relation("BusinessReferralReferrer")
-  referralReceived   BusinessReferral?  @relation("BusinessReferralReferred")
+  referralsSent      BusinessReferral[]          @relation("BusinessReferralReferrer")
+  referralReceived   BusinessReferral?           @relation("BusinessReferralReferred")
   partnerMemberships PartnerCampaignMember[]
   marketingEvents    BusinessMarketingEvent[]
 }
 
 model BusinessLead {
-  id                  String       @id @default(cuid())
+  id                  String                   @id @default(cuid())
   companyName         String
   contactName         String
   email               String
@@ -328,19 +328,19 @@ model BusinessLead {
   monthlyBudgetRange  String?
   desiredStartDate    DateTime?
   message             String
-  source              LeadSource   @default(DIRECT)
-  status              LeadStatus   @default(NEW)
+  source              LeadSource               @default(DIRECT)
+  status              LeadStatus               @default(NEW)
   assignedAdminId     String?
   businessAccountId   String?
   referralCode        String?
   partnerCampaignId   String?
   downloadRequestedAt DateTime?
   internalNote        String?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
-  assignedAdmin       User?        @relation("AssignedBusinessLead", fields: [assignedAdminId], references: [id], onDelete: SetNull)
-  businessAccount     BusinessAccount? @relation(fields: [businessAccountId], references: [id], onDelete: SetNull)
-  partnerCampaign     PartnerCampaign? @relation(fields: [partnerCampaignId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  assignedAdmin       User?                    @relation("AssignedBusinessLead", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  businessAccount     BusinessAccount?         @relation(fields: [businessAccountId], references: [id], onDelete: SetNull)
+  partnerCampaign     PartnerCampaign?         @relation(fields: [partnerCampaignId], references: [id], onDelete: SetNull)
   notes               BusinessLeadNote[]
   marketingEvents     BusinessMarketingEvent[]
 
@@ -383,34 +383,34 @@ model FirstTimeOffer {
 }
 
 model BusinessReferral {
-  id                        String                 @id @default(cuid())
+  id                        String               @id @default(cuid())
   referrerBusinessAccountId String
-  referralCode              String                 @unique
-  referredBusinessAccountId String?                @unique
-  status                    ReferralStatus         @default(INVITED)
-  rewardStatus              ReferralRewardStatus   @default(PENDING)
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
-  referrerBusinessAccount   BusinessAccount        @relation("BusinessReferralReferrer", fields: [referrerBusinessAccountId], references: [id], onDelete: Cascade)
-  referredBusinessAccount   BusinessAccount?       @relation("BusinessReferralReferred", fields: [referredBusinessAccountId], references: [id], onDelete: SetNull)
+  referralCode              String               @unique
+  referredBusinessAccountId String?              @unique
+  status                    ReferralStatus       @default(INVITED)
+  rewardStatus              ReferralRewardStatus @default(PENDING)
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+  referrerBusinessAccount   BusinessAccount      @relation("BusinessReferralReferrer", fields: [referrerBusinessAccountId], references: [id], onDelete: Cascade)
+  referredBusinessAccount   BusinessAccount?     @relation("BusinessReferralReferred", fields: [referredBusinessAccountId], references: [id], onDelete: SetNull)
 
   @@index([referrerBusinessAccountId, status])
 }
 
 model PartnerCampaign {
-  id             String                    @id @default(cuid())
-  slug           String                    @unique
+  id             String                  @id @default(cuid())
+  slug           String                  @unique
   title          String
   description    String
   area           String
   startsAt       DateTime
   endsAt         DateTime
   maxPartners    Int?
-  joinedPartners Int                       @default(0)
+  joinedPartners Int                     @default(0)
   offerText      String
-  status         PartnerCampaignStatus     @default(DRAFT)
-  createdAt      DateTime                  @default(now())
-  updatedAt      DateTime                  @updatedAt
+  status         PartnerCampaignStatus   @default(DRAFT)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
   members        PartnerCampaignMember[]
   leads          BusinessLead[]
 
@@ -504,6 +504,19 @@ enum GrowthEventType {
   REFERRAL_ACTIVATION_COMPLETED
   REPEAT_JOIN_STARTED
   REPEAT_RECRUITMENT_CREATED
+  DEMAND_CANDIDATE_FOUND
+  DEMAND_MATCH_NOTIFICATION_CREATED
+  DEMAND_MATCH_NOTIFICATION_CLICKED
+  DEMAND_JOIN_STARTED
+  DEMAND_JOIN_COMPLETED
+  EMAIL_SENT
+  EMAIL_DELIVERY_FAILED
+  EMAIL_LINK_CLICKED
+  EMAIL_CONVERSION
+  MEAL_MATCHED
+  MEAL_COMPLETION_CONFIRMATION_REQUESTED
+  MEAL_COMPLETED
+  MEAL_NOT_COMPLETED
 }
 
 model GrowthEvent {
@@ -518,12 +531,16 @@ model GrowthEvent {
   source        String?
   referrer      String?
   shareType     String?
+  // utm_source は既存の source を再利用する(重複カラムを避けるため)。utm_medium/utm_campaignのみ追加。
+  utmMedium     String?
+  utmCampaign   String?
   metadata      Json?
   createdAt     DateTime        @default(now())
 
   @@index([eventType, createdAt])
   @@index([sessionKey, createdAt])
   @@index([recruitmentId])
+  @@index([utmCampaign, createdAt])
 }
 
 enum JoinIntentStatus {
@@ -534,19 +551,19 @@ enum JoinIntentStatus {
 }
 
 model JoinIntent {
-  id            String           @id @default(cuid())
-  token         String           @unique
-  mealId        String
-  source        String?
-  referrer      String?
-  referralCode  String?
-  sessionKey    String
-  userId        String?
-  status        JoinIntentStatus @default(PENDING)
-  createdAt     DateTime         @default(now())
-  expiresAt     DateTime
-  consumedAt    DateTime?
-  meal          Meal             @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  id           String           @id @default(cuid())
+  token        String           @unique
+  mealId       String
+  source       String?
+  referrer     String?
+  referralCode String?
+  sessionKey   String
+  userId       String?
+  status       JoinIntentStatus @default(PENDING)
+  createdAt    DateTime         @default(now())
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  meal         Meal             @relation(fields: [mealId], references: [id], onDelete: Cascade)
 
   @@index([mealId, status])
   @@index([expiresAt])
@@ -565,17 +582,17 @@ model Favorite {
 }
 
 model Referral {
-  id               String    @id @default(cuid())
-  referralCode     String
-  referrerUserId   String
-  referredUserId   String?
-  mealId           String?
-  source           String?
-  createdAt        DateTime  @default(now())
-  convertedAt      DateTime?
-  activatedAt      DateTime?
-  referrer         User      @relation("ReferralReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
-  referred         User?     @relation("ReferralReferred", fields: [referredUserId], references: [id], onDelete: SetNull)
+  id             String    @id @default(cuid())
+  referralCode   String
+  referrerUserId String
+  referredUserId String?
+  mealId         String?
+  source         String?
+  createdAt      DateTime  @default(now())
+  convertedAt    DateTime?
+  activatedAt    DateTime?
+  referrer       User      @relation("ReferralReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  referred       User?     @relation("ReferralReferred", fields: [referredUserId], references: [id], onDelete: SetNull)
 
   @@index([referralCode])
   @@index([referrerUserId])
@@ -591,6 +608,8 @@ enum NotificationType {
   MEAL_TODAY
   MEAL_STARTING_SOON
   DEMAND_CLUSTER_READY
+  DEMAND_MATCH_FOUND
+  MEAL_COMPLETION_CHECK
 }
 
 enum NotificationCategory {
@@ -600,30 +619,36 @@ enum NotificationCategory {
 }
 
 model Notification {
-  id        String               @id @default(cuid())
-  userId    String
-  type      NotificationType
-  category  NotificationCategory
-  title     String
-  body      String
-  mealId    String?
-  dedupeKey String               @unique
-  readAt    DateTime?
-  clickedAt DateTime?
-  createdAt DateTime             @default(now())
-  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String               @id @default(cuid())
+  userId         String
+  type           NotificationType
+  category       NotificationCategory
+  title          String
+  body           String
+  mealId         String?
+  dedupeKey      String               @unique
+  readAt         DateTime?
+  clickedAt      DateTime?
+  emailSentAt    DateTime?
+  emailFailedAt  DateTime?
+  emailClickedAt DateTime?
+  createdAt      DateTime             @default(now())
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([userId, readAt])
 }
 
 model NotificationPreference {
-  userId                 String   @id
-  recruitmentEnabled     Boolean  @default(true)
-  participationEnabled   Boolean  @default(true)
-  recommendationEnabled  Boolean  @default(true)
-  updatedAt              DateTime @updatedAt
-  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                    String   @id
+  recruitmentEnabled        Boolean  @default(true)
+  participationEnabled      Boolean  @default(true)
+  recommendationEnabled     Boolean  @default(true)
+  // トランザクション通知(参加承認/成立/Demand一致/当日等)と、マーケティング寄りの通知(おすすめ等)のメール可否を区別する。
+  emailTransactionalEnabled Boolean  @default(true)
+  emailMarketingEnabled     Boolean  @default(false)
+  updatedAt                 DateTime @updatedAt
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum DemandIntentStatus {
@@ -641,6 +666,8 @@ model DemandIntent {
   timeRange        String?
   desiredGroupSize Int                @default(2)
   status           DemandIntentStatus @default(ACTIVE)
+  // 実際に参加した募集への軽量な参照(Meal.demandClusterKeyと同様、FK制約は持たせない)。
+  matchedMealId    String?
   createdAt        DateTime           @default(now())
   expiresAt        DateTime
   user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -662,11 +689,11 @@ model UserRecommendationProfile {
 }
 
 model BillingCustomer {
-  id                String   @id @default(cuid())
-  businessAccountId String   @unique
-  stripeCustomerId  String   @unique
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                String          @id @default(cuid())
+  businessAccountId String          @unique
+  stripeCustomerId  String          @unique
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
   businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
 }
 
@@ -708,11 +735,11 @@ model SponsorOrder {
 }
 
 model StripeWebhookEvent {
-  id            String    @id @default(cuid())
-  stripeEventId String    @unique
+  id            String   @id @default(cuid())
+  stripeEventId String   @unique
   eventType     String
-  processedAt   DateTime  @default(now())
-  createdAt     DateTime  @default(now())
+  processedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
 }
 
 model BusinessMember {
@@ -955,27 +982,27 @@ model VerificationToken {
 }
 
 model Meal {
-  id              String      @id @default(cuid())
-  hostId          String
-  title           String
-  description     String?
-  area            String
-  restaurant      String?
-  genre           String?
-  alcohol         String?
-  smoking         String?
-  ageCondition    String?
-  deadline        DateTime?
-  budgetMin       Int
-  budgetMax       Int
-  paymentType     PaymentType
-  maxParticipants Int
-  status          MealStatus  @default(OPEN)
-  firstJoinAt     DateTime?
-  matchedAt       DateTime?
+  id               String      @id @default(cuid())
+  hostId           String
+  title            String
+  description      String?
+  area             String
+  restaurant       String?
+  genre            String?
+  alcohol          String?
+  smoking          String?
+  ageCondition     String?
+  deadline         DateTime?
+  budgetMin        Int
+  budgetMax        Int
+  paymentType      PaymentType
+  maxParticipants  Int
+  status           MealStatus  @default(OPEN)
+  firstJoinAt      DateTime?
+  matchedAt        DateTime?
   demandClusterKey String?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   host           User                  @relation("MealHost", fields: [hostId], references: [id], onDelete: Cascade)
   candidates     MealCandidate[]
@@ -1075,6 +1102,8 @@ model Match {
   candidateId String
   scheduledAt DateTime
   status      MatchStatus @default(ACTIVE)
+  // COMPLETEDへの遷移時刻。Meal.matchedAt(必要人数到達)とは別概念で、実際に開催が確認された時刻。
+  completedAt DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
