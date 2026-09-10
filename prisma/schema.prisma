@@ -375,6 +375,40 @@ model BusinessLeadNote {
   @@index([adminUserId])
 }
 
+enum SalesCandidateStatus {
+  NEW
+  CONTACT_READY
+  CONTACTED
+  REPLIED
+  INTERESTED
+  REGISTERED
+  DECLINED
+  DO_NOT_CONTACT
+}
+
+// BusinessLeadは「問い合わせフォーム経由で先方から接触してきた」ことを表すインバウンド専用モデルで、
+// email/messageが必須のため、まだこちらから声をかけていない営業候補を無理にBusinessLeadとして
+// 作ると必須項目を捏造することになる。そのため別モデルとして持つ(Opportunity Ranking発の
+// アウトバウンド候補専用)。実在店舗が判明した場合のみstoreNameを埋める運用を想定。
+model SalesCandidate {
+  id               String               @id @default(cuid())
+  area             String
+  genre            String
+  // 特定の実在店舗が判明していない(エリア×ジャンル単位の候補)場合は空文字列を使う。
+  // NULLABLEにするとPostgresの一意制約でNULL同士が別行扱いになり重複生成を防げなくなるため。
+  storeName        String               @default("")
+  opportunityScore Float
+  status           SalesCandidateStatus @default(NEW)
+  lastContactedAt  DateTime?
+  contactCount     Int                  @default(0)
+  memo             String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@unique([area, genre, storeName])
+  @@index([status, opportunityScore])
+}
+
 model FirstTimeOffer {
   id                    String        @id @default(cuid())
   name                  String

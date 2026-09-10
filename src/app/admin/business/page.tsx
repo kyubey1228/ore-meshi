@@ -38,6 +38,7 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
         <Link className="text-link" href="/admin/business/campaigns">スポンサー施策管理へ →</Link>
         <Link className="text-link" href="/admin/business/partners">先行パートナー枠管理へ →</Link>
         <Link className="text-link" href="/admin/business/accounts">店舗アカウント承認へ →</Link>
+        <Link className="text-link" href="/admin/sales">営業候補・Sales Queueへ →</Link>
       </div>
       <p className="muted">店舗営業・スポンサー営業に使えるデータのみを表示しています。個人のメールアドレス・食事履歴・個別のDemand Intent所有者は一切表示しません。n＜{MIN_BUSINESS_SAMPLE_SIZE}の集計は「データ不足」として抑制しています。</p>
 
