@@ -250,7 +250,11 @@ model User {
   preferredArea         String?
   preferredGenres       String[] @default([])
   onboardingCompletedAt DateTime?
+  referralCode          String?    @unique
 
+  favorites              Favorite[]
+  referralsGiven         Referral[]           @relation("ReferralReferrer")
+  referralsReceived      Referral[]           @relation("ReferralReferred")
   accounts               Account[]
   sessions               Session[]
   hostedMeals            Meal[]               @relation("MealHost")
@@ -454,6 +458,30 @@ enum GrowthEventType {
   ONBOARDING_STARTED
   ONBOARDING_COMPLETED
   RECRUITMENT_JOIN_COMPLETED
+  JOIN_INTENT_CREATED
+  JOIN_INTENT_RESTORED
+  JOIN_INTENT_EXPIRED
+  JOIN_AFTER_SIGNUP_COMPLETED
+  RECOMMENDATION_IMPRESSION
+  RECOMMENDATION_CLICKED
+  QUICK_FILTER_VIEW
+  QUICK_FILTER_CLICKED
+  TRUST_BADGE_VIEWED
+  HOST_PROFILE_OPENED
+  QUICK_POST_STARTED
+  QUICK_POST_COMPLETED
+  QUICK_POST_ABANDONED
+  MEAL_TEMPLATE_VIEWED
+  MEAL_TEMPLATE_SELECTED
+  REFERRAL_LINK_CREATED
+  REFERRAL_LINK_OPENED
+  REFERRAL_SIGNUP_STARTED
+  REFERRAL_SIGNUP_COMPLETED
+  GUEST_FAVORITE_ADDED
+  GUEST_FAVORITE_REMOVED
+  GUEST_FAVORITES_MERGED
+  EXPERIMENT_EXPOSED
+  EXPERIMENT_CONVERSION
 }
 
 model GrowthEvent {
@@ -468,11 +496,67 @@ model GrowthEvent {
   source        String?
   referrer      String?
   shareType     String?
+  metadata      Json?
   createdAt     DateTime        @default(now())
 
   @@index([eventType, createdAt])
   @@index([sessionKey, createdAt])
   @@index([recruitmentId])
+}
+
+enum JoinIntentStatus {
+  PENDING
+  RESTORED
+  COMPLETED
+  EXPIRED
+}
+
+model JoinIntent {
+  id            String           @id @default(cuid())
+  token         String           @unique
+  mealId        String
+  source        String?
+  referrer      String?
+  referralCode  String?
+  sessionKey    String
+  userId        String?
+  status        JoinIntentStatus @default(PENDING)
+  createdAt     DateTime         @default(now())
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  meal          Meal             @relation(fields: [mealId], references: [id], onDelete: Cascade)
+
+  @@index([mealId, status])
+  @@index([expiresAt])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  mealId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meal      Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mealId])
+  @@index([mealId])
+}
+
+model Referral {
+  id               String    @id @default(cuid())
+  referralCode     String
+  referrerUserId   String
+  referredUserId   String?
+  mealId           String?
+  source           String?
+  createdAt        DateTime  @default(now())
+  convertedAt      DateTime?
+  referrer         User      @relation("ReferralReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  referred         User?     @relation("ReferralReferred", fields: [referredUserId], references: [id], onDelete: SetNull)
+
+  @@index([referralCode])
+  @@index([referrerUserId])
+  @@index([referredUserId])
 }
 
 model BillingCustomer {
@@ -794,6 +878,8 @@ model Meal {
   matches        Match[]
   purposes       MealPurposeRelation[]
   sponsoredMeals SponsoredMeal[]
+  joinIntents    JoinIntent[]
+  favorites      Favorite[]
 
   @@index([hostId, createdAt])
   @@index([status, area, createdAt])

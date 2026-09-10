@@ -1,0 +1,90 @@
+-- AlterEnum
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'JOIN_INTENT_CREATED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'JOIN_INTENT_RESTORED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'JOIN_INTENT_EXPIRED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'JOIN_AFTER_SIGNUP_COMPLETED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'RECOMMENDATION_IMPRESSION';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'RECOMMENDATION_CLICKED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'QUICK_FILTER_VIEW';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'QUICK_FILTER_CLICKED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'TRUST_BADGE_VIEWED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'HOST_PROFILE_OPENED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'QUICK_POST_STARTED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'QUICK_POST_COMPLETED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'QUICK_POST_ABANDONED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'MEAL_TEMPLATE_VIEWED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'MEAL_TEMPLATE_SELECTED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'REFERRAL_LINK_CREATED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'REFERRAL_LINK_OPENED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'REFERRAL_SIGNUP_STARTED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'REFERRAL_SIGNUP_COMPLETED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'GUEST_FAVORITE_ADDED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'GUEST_FAVORITE_REMOVED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'GUEST_FAVORITES_MERGED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'EXPERIMENT_EXPOSED';
+ALTER TYPE "GrowthEventType" ADD VALUE IF NOT EXISTS 'EXPERIMENT_CONVERSION';
+
+-- AlterTable
+ALTER TABLE "GrowthEvent" ADD COLUMN "metadata" JSONB;
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "referralCode" TEXT;
+CREATE UNIQUE INDEX "User_referralCode_key" ON "User"("referralCode");
+
+-- CreateEnum
+CREATE TYPE "JoinIntentStatus" AS ENUM ('PENDING', 'RESTORED', 'COMPLETED', 'EXPIRED');
+
+-- CreateTable
+CREATE TABLE "JoinIntent" (
+    "id" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "mealId" TEXT NOT NULL,
+    "source" TEXT,
+    "referrer" TEXT,
+    "referralCode" TEXT,
+    "sessionKey" TEXT NOT NULL,
+    "userId" TEXT,
+    "status" "JoinIntentStatus" NOT NULL DEFAULT 'PENDING',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "consumedAt" TIMESTAMP(3),
+
+    CONSTRAINT "JoinIntent_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "JoinIntent_token_key" ON "JoinIntent"("token");
+CREATE INDEX "JoinIntent_mealId_status_idx" ON "JoinIntent"("mealId", "status");
+CREATE INDEX "JoinIntent_expiresAt_idx" ON "JoinIntent"("expiresAt");
+ALTER TABLE "JoinIntent" ADD CONSTRAINT "JoinIntent_mealId_fkey" FOREIGN KEY ("mealId") REFERENCES "Meal"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- CreateTable
+CREATE TABLE "Favorite" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "mealId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Favorite_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "Favorite_userId_mealId_key" ON "Favorite"("userId", "mealId");
+CREATE INDEX "Favorite_mealId_idx" ON "Favorite"("mealId");
+ALTER TABLE "Favorite" ADD CONSTRAINT "Favorite_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Favorite" ADD CONSTRAINT "Favorite_mealId_fkey" FOREIGN KEY ("mealId") REFERENCES "Meal"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- CreateTable
+CREATE TABLE "Referral" (
+    "id" TEXT NOT NULL,
+    "referralCode" TEXT NOT NULL,
+    "referrerUserId" TEXT NOT NULL,
+    "referredUserId" TEXT,
+    "mealId" TEXT,
+    "source" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "convertedAt" TIMESTAMP(3),
+
+    CONSTRAINT "Referral_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX "Referral_referralCode_idx" ON "Referral"("referralCode");
+CREATE INDEX "Referral_referrerUserId_idx" ON "Referral"("referrerUserId");
+CREATE INDEX "Referral_referredUserId_idx" ON "Referral"("referredUserId");
+ALTER TABLE "Referral" ADD CONSTRAINT "Referral_referrerUserId_fkey" FOREIGN KEY ("referrerUserId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Referral" ADD CONSTRAINT "Referral_referredUserId_fkey" FOREIGN KEY ("referredUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
