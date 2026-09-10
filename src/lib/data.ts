@@ -34,6 +34,21 @@ export const getAreaOptions = unstable_cache(
   },
   ['area-options'], { revalidate: false },
 );
+// 都道府県タブ→市区町村一覧、のようなピッカーUI用。都道府県ごとに市区町村をグルーピングして返す
+// (順序はAreaOptionのsortOrder、つまり北海道〜沖縄の地理的な並び順を保つ)。
+export const getAreaOptionsGrouped = unstable_cache(
+  async () => {
+    const rows = await prisma.areaOption.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{city:'asc'}],select:{prefecture:true,city:true}});
+    const grouped: {prefecture:string;cities:string[]}[] = [];
+    for(const row of rows){
+      const last = grouped[grouped.length-1];
+      if(last && last.prefecture===row.prefecture) last.cities.push(row.city);
+      else grouped.push({prefecture:row.prefecture,cities:[row.city]});
+    }
+    return grouped;
+  },
+  ['area-options-grouped'], { revalidate: false },
+);
 export async function getNotifications(limit=30){
   const userId=await requirePageUser();
   return prisma.notification.findMany({where:{userId},orderBy:{createdAt:'desc'},take:limit});

@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { getActiveSeatCampaigns, getActiveStandaloneSponsoredMeals, getAreaOptions, getMealList, getMealPurposes, getRecentOpenMeals, getUserPreferences } from '@/lib/data';
-import { AreaDatalist } from '@/components/area-datalist';
+import { getActiveSeatCampaigns, getActiveStandaloneSponsoredMeals, getAreaOptions, getAreaOptionsGrouped, getMealList, getMealPurposes, getRecentOpenMeals, getUserPreferences } from '@/lib/data';
+import { AreaSearchField } from '@/components/area-search-field';
 import { currentUserId } from '@/server/auth';
 import { filterSchema } from '@/validators';
 import { paymentLabels } from '@/lib/format';
@@ -37,13 +37,14 @@ export default async function Meals({searchParams}:{searchParams:Promise<Record<
   const userId=await currentUserId();
   // preferences/recommendationProfileはgetMealListのランキングに必要だが、purposes/sponsoredMeals/seatCampaignsは
   // それらと無関係なので同じ待ち行列に入れて1段目から並行取得する(以前は2段階のwaterfallになっていた)。
-  const [preferences,recommendationProfile,purposes,sponsoredMeals,seatCampaigns,areaOptions]=await Promise.all([
+  const [preferences,recommendationProfile,purposes,sponsoredMeals,seatCampaigns,areaOptions,areaOptionsGrouped]=await Promise.all([
     userId?getUserPreferences(userId):Promise.resolve(null),
     userId?getRecommendationTopPicks(userId):Promise.resolve(null),
     getMealPurposes(),
     getActiveStandaloneSponsoredMeals(filters.area),
     getActiveSeatCampaigns(filters.area),
     getAreaOptions(),
+    getAreaOptionsGrouped(),
   ]);
   const context={preferredArea:preferences?.preferredArea,preferredGenres:preferences?.preferredGenres,recommendationProfile};
   const meals=await getMealList(filters,context);
@@ -69,8 +70,7 @@ export default async function Meals({searchParams}:{searchParams:Promise<Record<
     </div>
     <form className="filter-bar">
       <label>いつ<input type="date" name="date" defaultValue={filters.date}/></label>
-      <label>どこ<input name="area" list="area-options" placeholder="例：新宿" maxLength={80} defaultValue={filters.area}/></label>
-      <AreaDatalist options={areaOptions}/>
+      <AreaSearchField defaultValue={filters.area} grouped={areaOptionsGrouped} areaOptions={areaOptions}/>
       <label>予算の上限<select name="budget" defaultValue={filters.budget??''}><option value="">こだわらない</option><option value="1000">1,000円まで</option><option value="3000">3,000円まで</option><option value="5000">5,000円まで</option><option value="10000">10,000円まで</option></select></label>
       <label>お会計<select name="paymentType" defaultValue={filters.paymentType}><option value="">こだわらない</option>{Object.entries(paymentLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
       <label>どんな飯？<select name="purpose" defaultValue={filters.purpose??''}><option value="">こだわらない</option>{purposes.map(purpose=><option key={purpose.id} value={purpose.slug}>{purpose.label}</option>)}</select></label>
