@@ -21,11 +21,17 @@ export const getMealPurposes = unstable_cache(
   () => prisma.mealPurpose.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{label:'asc'}],select:{id:true,slug:true,label:true}}),
   ['meal-purposes'], { revalidate: false },
 );
-// エリア入力欄(募集作成・検索・店舗側の各フォーム)の入力補助候補。市区町村名のみを返し、
-// 都道府県名でのプレフィックスは付けない(既存のarea表記「渋谷」「新宿」等との一貫性のため)。
-// 外部キーではなくsuggestion用なので、呼び出し側はここにない値も自由入力できる。
+// エリア入力欄(募集作成・検索・店舗側の各フォーム)の入力補助候補。都道府県名(「東京都」等)と
+// 市区町村名(「渋谷区」等、都道府県プレフィックスなし。既存のarea表記「渋谷」「新宿」等との一貫性のため)を
+// どちらも候補に含める。外部キーではなくsuggestion用なので、呼び出し側はここにない値も自由入力できる。
 export const getAreaOptions = unstable_cache(
-  async () => (await prisma.areaOption.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{city:'asc'}],select:{city:true}})).map(a=>a.city),
+  async () => {
+    const [prefectures,cities]=await Promise.all([
+      prisma.areaOption.findMany({where:{isActive:true},distinct:['prefecture'],orderBy:[{sortOrder:'asc'}],select:{prefecture:true}}),
+      prisma.areaOption.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{city:'asc'}],select:{city:true}}),
+    ]);
+    return [...prefectures.map(a=>a.prefecture),...cities.map(a=>a.city)];
+  },
   ['area-options'], { revalidate: false },
 );
 export async function getNotifications(limit=30){
