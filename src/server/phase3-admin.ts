@@ -1,6 +1,7 @@
 import 'server-only';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/server/admin';
+import { percentiles } from '@/lib/percentile';
 
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -42,8 +43,34 @@ export async function getTimeToMatchStats(days: number) {
     medianTimeToMatchHours: median(toMatch),
     previousMedianTimeToMatchHours: median(prevToMatch),
     sampleSize: current.length,
+    firstJoinPercentiles: percentiles(toJoin),
+    matchPercentiles: percentiles(toMatch),
     areaStats: toStats(byArea, 'area') as { area: string; medianHours: number | null; sampleSize: number }[],
     genreStats: toStats(byGenre, 'genre') as { genre: string; medianHours: number | null; sampleSize: number }[],
+  };
+}
+
+// Matched(必要人数到達)とCompleted(実際に開催が確認された)を明確に分離した集計。
+// Weekly Completed Meals / Weekly Users Who Actually Dined をNorth Starとして扱う。
+export async function getCompletionStats(days: number) {
+  await requireAdmin();
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const [weeklyCompletedMeals, weeklyDiners, matchedInPeriod, completedInPeriod, notCompletedInPeriod] = await Promise.all([
+    prisma.match.count({ where: { status: 'COMPLETED', completedAt: { gte: sevenDaysAgo } } }),
+    prisma.matchParticipant.findMany({ where: { match: { status: 'COMPLETED', completedAt: { gte: sevenDaysAgo } } }, select: { userId: true }, distinct: ['userId'] }),
+    prisma.meal.count({ where: { matchedAt: { gte: since } } }),
+    prisma.match.count({ where: { status: 'COMPLETED', completedAt: { gte: since } } }),
+    prisma.match.count({ where: { status: 'CANCELLED', scheduledAt: { gte: since }, updatedAt: { gte: since } } }),
+  ]);
+  const totalConfirmed = completedInPeriod + notCompletedInPeriod;
+  return {
+    weeklyCompletedMeals,
+    weeklyUsersWhoActuallyDined: weeklyDiners.length,
+    matchedInPeriod,
+    completedInPeriod,
+    matchToCompletedRate: matchedInPeriod ? completedInPeriod / matchedInPeriod : 0,
+    completionConfirmationRate: totalConfirmed ? completedInPeriod / totalConfirmed : 0,
   };
 }
 
@@ -105,6 +132,27 @@ export async function getPhase3Overview(days: number) {
     referralActivatedUsers: referralActivatedCount,
     referralActivationRate: referralTotal ? referralActivatedCount / referralTotal : 0,
     signupCohortSize: signupCohort.length,
+  };
+}
+
+// Second Join Rate自体はgetPhase3Overviewに既存。ここでは「初回Completed後の再参加」と「2回目までの日数」を補完する。
+export async function getRepeatStats() {
+  await requireAdmin();
+  const [joinRows, completedFirstJoinUserIds] = await Promise.all([
+    prisma.joinRequest.findMany({ select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' } }),
+    prisma.matchParticipant.findMany({ where: { match: { status: 'COMPLETED' } }, select: { userId: true }, distinct: ['userId'] }),
+  ]);
+  const byUser = new Map<string, Date[]>();
+  for (const r of joinRows) byUser.set(r.userId, [...(byUser.get(r.userId) ?? []), r.createdAt]);
+  const daysToSecondJoin: number[] = [];
+  for (const dates of byUser.values()) if (dates.length >= 2) daysToSecondJoin.push((dates[1].getTime() - dates[0].getTime()) / (1000 * 60 * 60 * 24));
+  const completedUserIds = new Set(completedFirstJoinUserIds.map(r => r.userId));
+  const completedUsersWithSecondJoin = [...completedUserIds].filter(id => (byUser.get(id)?.length ?? 0) >= 2).length;
+  return {
+    medianDaysToSecondJoin: median(daysToSecondJoin),
+    // 「初回Completed後の再参加」の近似値(参加履歴全体で2回目のjoinRequestがあるかで判定。厳密な時系列前後判定ではない)。
+    firstCompletedToSecondJoinRate: completedUserIds.size ? completedUsersWithSecondJoin / completedUserIds.size : 0,
+    completedUserSampleSize: completedUserIds.size,
   };
 }
 
