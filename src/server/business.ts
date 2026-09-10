@@ -22,7 +22,7 @@ export async function getBusinessDashboard(){
     prisma.sponsoredMeal.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
     prisma.sponsorCampaign.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
     prisma.seatCampaign.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
-    prisma.coupon.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
+    prisma.coupon.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20,include:{_count:{select:{redemptions:true}}}}),
     prisma.directAdCampaign.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
     prisma.businessSocialAccount.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'}}),
     prisma.businessSocialPostSetting.findFirst({where:{businessAccountId:id}}),
@@ -32,10 +32,17 @@ export async function getBusinessDashboard(){
   return {membership,now,sponsoredMeals,sponsorCampaigns,seatCampaigns,coupons,directAds,socialAccounts,settings,recentPosts,analytics};
 }
 
+export async function getBusinessMonthlyStats(businessAccountId:string){
+  const since=new Date();since.setDate(1);since.setHours(0,0,0,0);
+  const rows=await prisma.referralEvent.groupBy({by:['eventType'],where:{businessAccountId,createdAt:{gte:since}},_count:{_all:true}});
+  const counts=Object.fromEntries(rows.map(row=>[row.eventType,row._count._all]));
+  return {mealsMatched:counts.MATCHED??0,referrals:counts.JOIN_REQUEST??0,couponRedemptions:counts.COUPON_REDEEMED??0,xVisits:counts.X_VISIT??0};
+}
+
 export async function getCampaignShareData(kind:CampaignKind,id:string):Promise<CampaignShareData|null>{
-  if(kind==='SPONSORED_MEAL'){const item=await prisma.sponsoredMeal.findUnique({where:{id},include:{businessAccount:true,meal:{select:{maxParticipants:true,_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}}}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:item.title,restaurantName:item.restaurantName,area:item.area,startsAt:item.startsAt,participantLimit:item.participantLimit,remaining:item.meal?Math.max(0,item.meal.maxParticipants-(item.meal._count.joinRequests+1)):item.remainingSlots,benefit:item.benefit,status:item.status};}
+  if(kind==='SPONSORED_MEAL'){const item=await prisma.sponsoredMeal.findUnique({where:{id},include:{businessAccount:true,meal:{select:{maxParticipants:true,_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}}}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:item.title,restaurantName:item.restaurantName,area:item.area,startsAt:item.startsAt,participantLimit:item.participantLimit,remaining:item.meal?Math.max(0,item.meal.maxParticipants-(item.meal._count.joinRequests+1)):item.remainingSlots,benefit:item.benefit,description:item.description,status:item.status};}
   if(kind==='SPONSOR_CAMPAIGN'){const item=await prisma.sponsorCampaign.findUnique({where:{id},include:{businessAccount:true}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:item.title,restaurantName:item.restaurantName,area:item.area,startsAt:item.startsAt,participantLimit:item.participantLimit,remaining:item.remainingSlots,benefit:item.benefit,status:item.status};}
-  if(kind==='SEAT_CAMPAIGN'){const item=await prisma.seatCampaign.findUnique({where:{id},include:{businessAccount:true}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:'今、席空いてます',restaurantName:item.restaurantName,area:item.area,endsAt:item.endsAt,remaining:item.remainingSeats,benefit:item.benefit,status:item.status};}
+  if(kind==='SEAT_CAMPAIGN'){const item=await prisma.seatCampaign.findUnique({where:{id},include:{businessAccount:true}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:'今、席空いてます',restaurantName:item.restaurantName,area:item.area,endsAt:item.endsAt,remaining:item.remainingSeats,benefit:item.benefit,description:item.description,status:item.status};}
   if(kind==='COUPON'){const item=await prisma.coupon.findUnique({where:{id},include:{businessAccount:true}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:item.title,restaurantName:item.restaurantName,area:item.area,endsAt:item.expiresAt,benefit:item.benefit,status:item.status};}
   const item=await prisma.directAdCampaign.findUnique({where:{id},include:{businessAccount:true}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.advertiserName,title:item.title,restaurantName:item.businessAccount.name,area:item.businessAccount.area??'',startsAt:item.startsAt,endsAt:item.endsAt,description:item.description,status:item.status};
 }
