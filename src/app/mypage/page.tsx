@@ -13,6 +13,7 @@ export default async function MyPage() {
   const data = await getMyPageData();
   if (!data.onboardingCompletedAt) redirect('/onboarding');
   const upcoming = data.matches.filter(m => m.status === 'ACTIVE');
+  const lastHostedMeal = data.hostedMeals[0] ?? null;
   const [favoriteIds, referralCode, referralStats] = await Promise.all([getFavoriteMealIds(data.userId), getOrCreateReferralCode(data.userId), getReferralStats(data.userId)]);
   const favoriteMeals = favoriteIds.length ? await getMealsByIds(favoriteIds) : [];
 
@@ -23,6 +24,14 @@ export default async function MyPage() {
       <section className="panel"><h2>参加予定</h2>{upcoming.length ? upcoming.map(match => <Link className="list-card" href={`/matches/${match.id}`} key={match.id}><strong>{match.meal.title}</strong><span>{dateTimeLabel(match.scheduledAt)} · {matchStatusLabels[match.status]}</span></Link>) : <p className="muted">今のところ飯の予定なし。</p>}</section>
       <section className="panel"><h2>飲食歴</h2>{data.completedMatches.length ? data.completedMatches.slice(0,5).map(match => <Link className="history-card" href={`/matches/${match.id}`} key={match.id}><strong>{dateTimeLabel(match.scheduledAt)}</strong><span>{match.meal.title} · {match.meal.area}</span><span>{paymentLabels[match.meal.paymentType]} · {match.participants.length}人</span><div className="avatar-stack">{match.participants.map(({user}) => <UserAvatar key={user.id} user={user} />)}</div></Link>) : <p className="muted">まだ誰とも飯を食ってない。</p>}<Link className="text-link" href="/history">飲食歴をすべて見る →</Link></section>
     </div>
+    {lastHostedMeal && <div className="panel">
+      <h2>また同じ感じで探す？</h2>
+      <p className="muted">前回：{lastHostedMeal.area} × {lastHostedMeal.genre ?? 'ジャンルこだわらない'}</p>
+      <div className="row wrap">
+        <Link className="btn" href={`/meals/new?repeat=${lastHostedMeal.id}`}>同じ条件でまた募集する</Link>
+        <Link className="btn secondary" href={`/meals?area=${encodeURIComponent(lastHostedMeal.area)}`}>前回と似た募集を探す</Link>
+      </div>
+    </div>}
     {favoriteMeals.length > 0 && <>
       <div className="section-heading"><h2>あとで見る</h2></div>
       <div className="meal-grid">{favoriteMeals.map(meal => <MealCard key={meal.id} meal={meal} />)}</div>
