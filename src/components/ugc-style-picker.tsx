@@ -1,13 +1,15 @@
 'use client';
 
 import { Shuffle } from 'lucide-react';
-import { RANDOM_UGC_STYLES, UGC_STYLES, type UgcStyle } from '@/lib/ugc';
+import { getUgcStyle, RANDOM_UGC_STYLES, UGC_STYLES, type UgcStyle } from '@/lib/ugc';
 
 export function UgcStylePicker({ value, onChange, previewUrl }: {
   value: UgcStyle;
   onChange: (style: UgcStyle) => void;
   previewUrl: string;
 }) {
+  const selectedStyle = getUgcStyle(value);
+
   function randomize() {
     const candidates = RANDOM_UGC_STYLES.filter(style => style.id !== value);
     onChange(candidates[Math.floor(Math.random() * candidates.length)]?.id ?? RANDOM_UGC_STYLES[0].id);
@@ -19,9 +21,11 @@ export function UgcStylePicker({ value, onChange, previewUrl }: {
         <div><strong>シェア画像を選ぶ</strong><p className="muted">漫画カードがXやLINEのリンクに付きます。</p></div>
         <button className="btn secondary small" type="button" onClick={randomize}><Shuffle size={16} />おまかせで変える</button>
       </div>
-      {/* APIが生成する最終OGPをそのまま表示する。 */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="ugc-preview" src={previewUrl} alt="選択中のシェア画像プレビュー" width={600} height={315} />
+      <div className="ugc-preview-frame" style={{ backgroundImage: `url(${selectedStyle.image})` }}>
+        {/* 背景を即時表示し、APIが生成した最終OGPを読み込み次第重ねる。本番でAPIが失敗しても素材は残る。 */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img key={previewUrl} className="ugc-preview" src={previewUrl} alt={`「${selectedStyle.label}」のシェア画像プレビュー`} width={600} height={315} onError={event => { event.currentTarget.style.display = 'none'; }} />
+      </div>
       <div className="ugc-options" role="radiogroup" aria-label="シェア画像のテイスト">
         {UGC_STYLES.map(style => (
           <button
