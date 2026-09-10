@@ -5,8 +5,10 @@ import { getServerSession, type NextAuthOptions } from 'next-auth';
 import TwitterProvider, { type TwitterProfile } from 'next-auth/providers/twitter';
 import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
+import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { recordGrowthEvent } from '@/server/growth';
+import { REFERRAL_COOKIE } from '@/server/referral-constants';
 
 export const authConfigured = Boolean(
   process.env.AUTH_SECRET &&
@@ -78,7 +80,17 @@ export const authOptions: NextAuthOptions = {
         select: { id: true },
       });
 
-      if (!existing) await recordGrowthEvent('SIGNUP_COMPLETED', { userId: user.id, loggedIn: true });
+      if (!existing) {
+        await recordGrowthEvent('SIGNUP_COMPLETED', { userId: user.id, loggedIn: true });
+        const referralCode = (await cookies()).get(REFERRAL_COOKIE)?.value;
+        if (referralCode) {
+          const referral = await prisma.referral.findFirst({ where: { referralCode, referredUserId: null }, orderBy: { createdAt: 'desc' } });
+          if (referral && referral.referrerUserId !== user.id) {
+            await prisma.referral.update({ where: { id: referral.id }, data: { referredUserId: user.id, convertedAt: new Date() } });
+            await recordGrowthEvent('REFERRAL_SIGNUP_COMPLETED', { userId: user.id, loggedIn: true, recruitmentId: referral.mealId ?? undefined });
+          }
+        }
+      }
 
       token.userId = user.id;
       return token;
