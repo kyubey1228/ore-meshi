@@ -43,6 +43,30 @@ export async function getBusinessMonthlyStats(businessAccountId:string){
   return {mealsMatched:counts.MATCHED??0,mealsCompleted:counts.COMPLETED??0,referrals:counts.JOIN_REQUEST??0,couponRedemptions:counts.COUPON_REDEEMED??0,xVisits:counts.X_VISIT??0};
 }
 
+// Business Activation Funnel(business_signup→...→first_paid_purchase)。
+// 新規イベント種別は追加せず、既存のBusinessAccount.status/ReferralEvent/SponsorOrderから
+// 「その店舗がこれまでに一度でも到達したか」を全期間で判定する(月次集計のgetBusinessMonthlyStatsとは別)。
+export async function getBusinessActivationFunnel(businessAccountId:string){
+  const [account,sponsoredMealCount,seatCampaignCount,eventCounts,paidOrderCount]=await Promise.all([
+    prisma.businessAccount.findUnique({where:{id:businessAccountId},select:{status:true}}),
+    prisma.sponsoredMeal.count({where:{businessAccountId}}),
+    prisma.seatCampaign.count({where:{businessAccountId}}),
+    prisma.referralEvent.groupBy({by:['eventType'],where:{businessAccountId},_count:{_all:true}}),
+    prisma.sponsorOrder.count({where:{businessAccountId,status:'PAID'}}),
+  ]);
+  const counts=Object.fromEntries(eventCounts.map(row=>[row.eventType,row._count._all]));
+  return {
+    signedUp:true,
+    approved:account?.status==='ACTIVE',
+    firstAvailabilityPosted:sponsoredMealCount>0||seatCampaignCount>0,
+    firstView:(counts.X_VISIT??0)>0,
+    firstUserAction:(counts.JOIN_REQUEST??0)>0,
+    firstMatch:(counts.MATCHED??0)>0,
+    firstCompleted:(counts.COMPLETED??0)>0,
+    firstPaidPurchase:paidOrderCount>0,
+  };
+}
+
 // MatchedとCompletedを混同しないための集計。参加人数は「Match成立時点の募集人数」の合計であり、
 // 実測の出席者数ではないため常に「推定」として扱う。
 export async function getBusinessCompletionStats(businessAccountId:string){

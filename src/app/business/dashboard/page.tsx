@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { currentBusinessMembership, getBusinessCompletionStats, getBusinessDashboard, getBusinessMonthlyStats } from '@/server/business';
+import { currentBusinessMembership, getBusinessActivationFunnel, getBusinessCompletionStats, getBusinessDashboard, getBusinessMonthlyStats } from '@/server/business';
 import { getBusinessPlan, getBusinessPricingCatalog } from '@/server/billing';
 import { BusinessPaymentBanner } from '@/components/business-payment-banner';
 import { BusinessStatusBadge } from '@/components/business-status-badge';
@@ -30,14 +30,23 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
   if (membership.businessAccount.status === 'PENDING') return <section className="section narrow"><span className="eyebrow orange">APPLICATION RECEIVED</span><h1>登録を受け付けました。</h1><div className="panel"><h2>いま内容を確認しています。</h2><p>確認が終わると、スポンサー飯や空席スポンサーを作成できるようになります。</p><p className="muted">お急ぎの場合は問い合わせフォームからご連絡ください。</p><Link className="btn secondary" href="/business/contact">相談する</Link></div></section>;
   if (membership.businessAccount.status === 'SUSPENDED') return <section className="section narrow"><h1>店舗管理を一時停止しています。</h1><p className="notice">詳しくは運営へお問い合わせください。</p><Link className="btn" href="/business/contact">問い合わせる</Link></section>;
   const query = await searchParams;
-  const [data, plan, monthly, completion, catalog] = await measurePerformance('BUSINESS', 'dashboard aggregates', () => Promise.all([
+  const [data, plan, monthly, completion, catalog, funnel] = await measurePerformance('BUSINESS', 'dashboard aggregates', () => Promise.all([
     getBusinessDashboard(),
     getBusinessPlan(membership.businessAccountId),
     getBusinessMonthlyStats(membership.businessAccountId),
     getBusinessCompletionStats(membership.businessAccountId),
     getBusinessPricingCatalog(),
+    getBusinessActivationFunnel(membership.businessAccountId),
   ]));
   const recent = recentItems(data);
+  const activationSteps = [
+    { done: funnel.firstAvailabilityPosted, label: 'スポンサー飯・空席スポンサーを1件出す', href: '/business/sponsored-meals/new' },
+    { done: funnel.firstView, label: 'Xで共有してユーザーに見てもらう', href: '/business/social' },
+    { done: funnel.firstUserAction, label: '参加希望をもらう', href: undefined },
+    { done: funnel.firstMatch, label: '飯を成立させる', href: undefined },
+    { done: funnel.firstCompleted, label: '実際に開催する', href: undefined },
+  ];
+  const nextStep = activationSteps.find(step => !step.done);
 
   return (
     <section className="section">
@@ -50,6 +59,14 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
         </div>
         <Link className="btn secondary" href="/business/billing">プランを見る</Link>
       </div>
+
+      {nextStep && (
+        <div className="panel">
+          <h2>次にやること</h2>
+          <p>{nextStep.label}</p>
+          {nextStep.href && <Link className="btn" href={nextStep.href}>やってみる</Link>}
+        </div>
+      )}
 
       <div className="panel">
         <h2>今月の成果</h2>
