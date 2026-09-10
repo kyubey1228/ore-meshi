@@ -36,7 +36,17 @@ export async function getBusinessMonthlyStats(businessAccountId:string){
   const since=new Date();since.setDate(1);since.setHours(0,0,0,0);
   const rows=await prisma.referralEvent.groupBy({by:['eventType'],where:{businessAccountId,createdAt:{gte:since}},_count:{_all:true}});
   const counts=Object.fromEntries(rows.map(row=>[row.eventType,row._count._all]));
-  return {mealsMatched:counts.MATCHED??0,referrals:counts.JOIN_REQUEST??0,couponRedemptions:counts.COUPON_REDEEMED??0,xVisits:counts.X_VISIT??0};
+  return {mealsMatched:counts.MATCHED??0,mealsCompleted:counts.COMPLETED??0,referrals:counts.JOIN_REQUEST??0,couponRedemptions:counts.COUPON_REDEEMED??0,xVisits:counts.X_VISIT??0};
+}
+
+// MatchedとCompletedを混同しないための集計。参加人数は「Match成立時点の募集人数」の合計であり、
+// 実測の出席者数ではないため常に「推定」として扱う。
+export async function getBusinessCompletionStats(businessAccountId:string){
+  const matchedEvents=await prisma.referralEvent.findMany({where:{businessAccountId,eventType:'MATCHED'},select:{conversionEntityId:true}});
+  const matchIds=matchedEvents.map(e=>e.conversionEntityId).filter((id):id is string=>Boolean(id));
+  if(matchIds.length===0)return {estimatedParticipants:0};
+  const matches=await prisma.match.findMany({where:{id:{in:matchIds}},select:{meal:{select:{maxParticipants:true}}}});
+  return {estimatedParticipants:matches.reduce((sum,m)=>sum+m.meal.maxParticipants,0)};
 }
 
 export async function getCampaignShareData(kind:CampaignKind,id:string):Promise<CampaignShareData|null>{

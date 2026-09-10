@@ -14,6 +14,11 @@ export async function setMatchStatus(input: unknown) {return perform(async userI
     await tx.rescheduleProposal.updateMany({where:{matchId:id,status:'PENDING'},data:{status:'CANCELLED'}});
     if(match.meal.status!=='CANCELLED') await tx.meal.update({where:{id:match.mealId},data:{status:'CLOSED'}});
     await tx.joinRequest.updateMany({where:{mealId:match.mealId,status:'PENDING'},data:{status:'REJECTED'}});
+    // このMatchがBusinessのX共有経由(ReferralEvent)で成立していた場合、CompletedをMatchedとは別に記録する(混同禁止)。
+    if(status==='COMPLETED'){
+      const attribution=await tx.referralEvent.findFirst({where:{eventType:'MATCHED',conversionEntityId:id},orderBy:{createdAt:'desc'}});
+      if(attribution)await tx.referralEvent.create({data:{businessAccountId:attribution.businessAccountId,socialPostId:attribution.socialPostId,entityType:attribution.entityType,entityId:attribution.entityId,eventType:'COMPLETED',sourceEventId:attribution.id,conversionEntityId:id,utmSource:attribution.utmSource,utmMedium:attribution.utmMedium,utmCampaign:attribution.utmCampaign,anonymousId:attribution.anonymousId}});
+    }
     return {area:match.meal.area,notCompletedAfterSchedule};
   });
   if(status==='COMPLETED')await recordGrowthEvent('MEAL_COMPLETED',{area:outcome.area,loggedIn:true});
