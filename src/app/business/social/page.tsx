@@ -22,6 +22,6 @@ export default async function BusinessSocial({searchParams}:{searchParams:Promis
     {campaign&&allowed&&<BusinessSharePreview campaign={campaign} origin={appUrl()} postType={postType(campaign.kind,campaign.remaining)} eventId={randomUUID()}/>}
     {!campaign&&<div className="notice">Business Dashboardから宣伝するキャンペーンを選んでください。</div>}
     <div className="panel"><h2>X経由の成果</h2><div className="analytics-grid">{Object.entries(labels).map(([key,label])=><div key={key}><strong>{counts[key]??0}</strong><span>{label}</span></div>)}</div></div>
-    <div className="panel"><h2>最近の投稿</h2>{data.recentPosts.length?data.recentPosts.map(post=><div className="list-card" key={post.id}><strong>{post.postType}</strong><span>{post.status==='PENDING'&&post.shareMode==='MANUAL'?'投稿画面を開いた':post.status} · {post.createdAt.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})}</span></div>):<p className="muted">投稿履歴はまだありません。</p>}</div>
+    <div className="panel"><h2>最近の投稿</h2>{data.recentPosts.length?data.recentPosts.map(post=><div className="list-card" key={post.id}><strong>{post.postType}</strong><span>{post.status==='PENDING'&&post.shareMode==='MANUAL'?'投稿画面を開いた':post.status} · {new Date(post.createdAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})}</span></div>):<p className="muted">投稿履歴はまだありません。</p>}</div>
   </section>;
 }

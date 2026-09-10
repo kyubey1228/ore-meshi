@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { campaignPath } from '@/features/x-sharing/templates';
 import type { getActiveSeatCampaigns } from '@/lib/data';
 
-const timeLabel = (date: Date) => new Intl.DateTimeFormat('ja-JP', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(date);
+// unstable_cache経由の値はキャッシュヒット時にDateではなく文字列で返ることがあるため、new Date()で正規化してから整形する。
+const timeLabel = (date: Date | string) => new Intl.DateTimeFormat('ja-JP', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(new Date(date));
 
 export function SeatCampaignBanner({ items }: { items: Awaited<ReturnType<typeof getActiveSeatCampaigns>> }) {
   if (!items.length) return null;

@@ -7,7 +7,8 @@ import { BusinessCheckoutButton } from '@/components/business-checkout-button';
 import { BusinessEmptyState } from '@/components/business-empty-state';
 import { BusinessCampaignForm } from '@/components/business-campaign-form';
 
-const dateTimeLabel = (date: Date) => new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(date);
+// unstable_cache経由の値はキャッシュヒット時にDateではなく文字列で返ることがあるため、new Date()で正規化してから整形する。
+const dateTimeLabel = (date: Date | string) => new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(new Date(date));
 
 export const metadata = { title: 'スポンサー飯' };
 

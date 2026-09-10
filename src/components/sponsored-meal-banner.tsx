@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { campaignPath } from '@/features/x-sharing/templates';
 import type { getActiveStandaloneSponsoredMeals } from '@/lib/data';
 
-const dateTimeLabel = (date: Date) => new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(date);
+// unstable_cache経由の値はキャッシュヒット時にDateではなく文字列で返ることがあるため、new Date()で正規化してから整形する。
+const dateTimeLabel = (date: Date | string) => new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(new Date(date));
 
 export function SponsoredMealBanner({ items }: { items: Awaited<ReturnType<typeof getActiveStandaloneSponsoredMeals>> }) {
   if (!items.length) return null;

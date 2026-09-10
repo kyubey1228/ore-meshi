@@ -5,7 +5,8 @@ import { AreaDatalist } from '@/components/area-datalist';
 
 export const metadata = { title: 'クーポン一覧' };
 
-const dateTimeLabel = (date: Date) => new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(date);
+// unstable_cache経由の値はキャッシュヒット時にDateではなく文字列で返ることがあるため、new Date()で正規化してから整形する。
+const dateTimeLabel = (date: Date | string) => new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(new Date(date));
 
 export default async function CouponsPage({ searchParams }: { searchParams: Promise<{ area?: string }> }) {
   const { area } = await searchParams;

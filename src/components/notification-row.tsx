@@ -21,7 +21,7 @@ export function NotificationRow({ notification }: { notification: NotificationIt
     <button type="button" className={`notification-item${notification.readAt ? '' : ' unread'}`} onClick={onClick} disabled={pending} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}>
       <strong>{notification.title}</strong>
       <span>{notification.body}</span>
-      <small>{new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(notification.createdAt)}</small>
+      <small>{new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(notification.createdAt))}</small>
     </button>
   );
 }

@@ -4,7 +4,8 @@ import { currentBusinessMembership, getBusinessDashboard } from '@/server/busine
 import { BusinessStatusBadge } from '@/components/business-status-badge';
 import { BusinessEmptyState } from '@/components/business-empty-state';
 
-const dateLabel = (date: Date) => new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric', timeZone: 'Asia/Tokyo' }).format(date);
+// unstable_cache経由の値はキャッシュヒット時にDateではなく文字列で返ることがあるため、new Date()で正規化してから整形する。
+const dateLabel = (date: Date | string) => new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric', timeZone: 'Asia/Tokyo' }).format(new Date(date));
 
 export const metadata = { title: 'クーポン' };
 
