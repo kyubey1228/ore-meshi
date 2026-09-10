@@ -17,7 +17,7 @@ export default async function MyPage() {
   const userId = await currentUserId();
   if (!userId) redirect('/login?next=%2Fmypage');
   const [data, favoriteIds, referralCode, referralStats] = await Promise.all([
-    getMyPageData(),
+    getMyPageData(userId),
     getFavoriteMealIds(userId),
     getOrCreateReferralCode(userId),
     getReferralStats(userId),
