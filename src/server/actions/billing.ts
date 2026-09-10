@@ -26,12 +26,17 @@ async function checkoutResult(work: () => Promise<string>): Promise<CheckoutResu
   }
 }
 
-async function campaignCheckout(campaignIdInput: unknown, orderType: Extract<OrderType, 'SPONSORED_MEAL' | 'SEAT_CAMPAIGN'>) {
+type CampaignOrderType = Extract<OrderType, 'SPONSORED_MEAL' | 'SEAT_CAMPAIGN' | 'AREA_FEATURED'>;
+const firstTimeOfferTargets = new Set(['SPONSORED_MEAL', 'SEAT_CAMPAIGN']);
+
+async function campaignCheckout(campaignIdInput: unknown, orderType: CampaignOrderType) {
   return checkoutResult(async () => {
     const campaignId = idSchema.parse(campaignIdInput);
     const campaign = orderType === 'SPONSORED_MEAL'
       ? await prisma.sponsoredMeal.findUnique({ where: { id: campaignId } })
-      : await prisma.seatCampaign.findUnique({ where: { id: campaignId } });
+      : orderType === 'SEAT_CAMPAIGN'
+      ? await prisma.seatCampaign.findUnique({ where: { id: campaignId } })
+      : await prisma.areaSponsorship.findUnique({ where: { id: campaignId } });
     ensure(campaign, 'キャンペーンが見つかりません。');
     const membership = await requireBillingMembership(campaign.businessAccountId);
     ensure(campaign.businessAccountId === membership.businessAccountId);
@@ -50,7 +55,8 @@ async function campaignCheckout(campaignIdInput: unknown, orderType: Extract<Ord
       order = await prisma.sponsorOrder.update({ where: { id: order.id }, data: { stripePriceId } });
     }
 
-    const sessionKey=await marketingSessionKey();const offer=await getEligibleFirstTimeOffer(campaign.businessAccountId,orderType);
+    const sessionKey=await marketingSessionKey();
+    const offer=firstTimeOfferTargets.has(orderType)?await getEligibleFirstTimeOffer(campaign.businessAccountId,orderType as 'SPONSORED_MEAL'|'SEAT_CAMPAIGN'):null;
     const metadata = { businessAccountId: campaign.businessAccountId, campaignId, orderId: order.id, orderType, marketingSessionKey:sessionKey,firstTimeOfferId:offer?.id??'' };
     const session = await getStripe().checkout.sessions.create({
       mode: 'payment',
@@ -75,6 +81,10 @@ export async function createSponsoredMealCheckout(campaignId: unknown): Promise<
 
 export async function createSeatCampaignCheckout(campaignId: unknown): Promise<CheckoutResult> {
   return campaignCheckout(campaignId, 'SEAT_CAMPAIGN');
+}
+
+export async function createAreaSponsorshipCheckout(campaignId: unknown): Promise<CheckoutResult> {
+  return campaignCheckout(campaignId, 'AREA_FEATURED');
 }
 
 export async function createBusinessSubscriptionCheckout(planInput: unknown): Promise<CheckoutResult> {

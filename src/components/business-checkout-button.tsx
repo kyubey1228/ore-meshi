@@ -1,10 +1,11 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { createBusinessSubscriptionCheckout, createSeatCampaignCheckout, createSponsoredMealCheckout } from '@/server/actions/billing';
+import { createAreaSponsorshipCheckout, createBusinessSubscriptionCheckout, createSeatCampaignCheckout, createSponsoredMealCheckout } from '@/server/actions/billing';
 
 type Props =
   | { kind: 'SPONSORED_MEAL'; sponsoredMealId: string; label: string; disabled?: boolean }
   | { kind: 'SEAT_CAMPAIGN'; seatCampaignId: string; label: string; disabled?: boolean }
+  | { kind: 'AREA_FEATURED'; areaSponsorshipId: string; label: string; disabled?: boolean }
   | { kind: 'SUBSCRIPTION'; plan: 'STANDARD' | 'PRO'; label: string; disabled?: boolean };
 
 export function BusinessCheckoutButton(props: Props) {
@@ -21,6 +22,7 @@ export function BusinessCheckoutButton(props: Props) {
         const result =
           props.kind === 'SPONSORED_MEAL' ? await createSponsoredMealCheckout(props.sponsoredMealId)
           : props.kind === 'SEAT_CAMPAIGN' ? await createSeatCampaignCheckout(props.seatCampaignId)
+          : props.kind === 'AREA_FEATURED' ? await createAreaSponsorshipCheckout(props.areaSponsorshipId)
           : await createBusinessSubscriptionCheckout(props.plan);
         if (!result.success) {
           setError(result.error);

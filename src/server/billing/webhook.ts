@@ -39,19 +39,26 @@ async function syncSubscription(tx: Prisma.TransactionClient, subscription: Stri
       : null;
   if (!plan) throw new Error('Unknown subscription price');
   const dates = period(subscription);
+  const newStatus = subscriptionStatus(subscription.status);
+  const existing = await tx.businessSubscription.findUnique({ where: { businessAccountId }, select: { status: true } });
   await tx.businessSubscription.upsert({
     where: { businessAccountId },
     create: {
       businessAccountId, stripeSubscriptionId: subscription.id, stripePriceId: priceId, plan,
-      status: subscriptionStatus(subscription.status), currentPeriodStart: dates.start, currentPeriodEnd: dates.end,
+      status: newStatus, currentPeriodStart: dates.start, currentPeriodEnd: dates.end,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
     },
     update: {
       stripeSubscriptionId: subscription.id, stripePriceId: priceId, plan,
-      status: subscriptionStatus(subscription.status), currentPeriodStart: dates.start, currentPeriodEnd: dates.end,
+      status: newStatus, currentPeriodStart: dates.start, currentPeriodEnd: dates.end,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
     },
   });
+  // 既にACTIVEだった場合(更新のたびに届くWebhook)は再発火しない。新規に有効化した瞬間のみ計測する。
+  if (newStatus === 'ACTIVE' && existing?.status !== 'ACTIVE') {
+    const sessionKey = subscription.metadata.marketingSessionKey;
+    if (sessionKey) await tx.businessMarketingEvent.create({ data: { sessionKey, businessAccountId, eventType: 'SUBSCRIPTION_STARTED', content: plan } });
+  }
 }
 
 async function completeOrder(tx: Prisma.TransactionClient, session: Stripe.Checkout.Session) {
@@ -72,11 +79,18 @@ async function completeOrder(tx: Prisma.TransactionClient, session: Stripe.Check
   if (order.orderType === 'SPONSORED_MEAL') {
     const result = await tx.sponsoredMeal.updateMany({ where: { id: campaignId, businessAccountId, status: 'DRAFT' }, data: { status: 'ACTIVE' } });
     if (result.count !== 1 && order.status !== 'PAID') throw new Error('Sponsored meal mismatch');
+    if (result.count === 1 && session.metadata?.marketingSessionKey) await tx.businessMarketingEvent.create({ data: { sessionKey: session.metadata.marketingSessionKey, businessAccountId, eventType: 'SPONSORED_MEAL_ACTIVATED' } });
   } else if (order.orderType === 'SEAT_CAMPAIGN') {
     const campaign = await tx.seatCampaign.findFirst({ where: { id: campaignId, businessAccountId } });
     if (!campaign || campaign.endsAt <= new Date()) throw new Error('Seat campaign is expired');
     const result = await tx.seatCampaign.updateMany({ where: { id: campaignId, businessAccountId, status: 'DRAFT' }, data: { status: 'ACTIVE' } });
     if (result.count !== 1 && order.status !== 'PAID') throw new Error('Seat campaign mismatch');
+    if (result.count === 1 && session.metadata?.marketingSessionKey) await tx.businessMarketingEvent.create({ data: { sessionKey: session.metadata.marketingSessionKey, businessAccountId, eventType: 'SEAT_CAMPAIGN_ACTIVATED' } });
+  } else if (order.orderType === 'AREA_FEATURED') {
+    const campaign = await tx.areaSponsorship.findFirst({ where: { id: campaignId, businessAccountId } });
+    if (!campaign || campaign.endsAt <= new Date()) throw new Error('Area sponsorship is expired');
+    const result = await tx.areaSponsorship.updateMany({ where: { id: campaignId, businessAccountId, status: 'DRAFT' }, data: { status: 'ACTIVE' } });
+    if (result.count !== 1 && order.status !== 'PAID') throw new Error('Area sponsorship mismatch');
   }
   if(session.metadata?.marketingSessionKey)await tx.businessMarketingEvent.create({data:{sessionKey:session.metadata.marketingSessionKey,businessAccountId,eventType:'CHECKOUT_COMPLETED'}});
   if(session.metadata?.firstTimeOfferId)await tx.firstTimeOffer.updateMany({where:{id:session.metadata.firstTimeOfferId},data:{usedCount:{increment:1}}});
