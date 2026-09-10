@@ -39,14 +39,14 @@ async function computeAreaGenreMatrix(days: number): Promise<Cell[]> {
 // 30分キャッシュの都度集計(専用の日次バッチテーブルは現状のデータ量では不要と判断し見送り)。
 export const getAreaGenreMatrix = unstable_cache(computeAreaGenreMatrix, ['business-area-genre-matrix'], { revalidate: 1800 });
 
-export async function getAreaGenreDashboard(days: number) {
+// Area×Genre全件を毎回返さないよう、需要件数の多い順に上限件数までに絞る(既定60件)。
+export async function getAreaGenreDashboard(days: number, limit = 60) {
   await requireAdmin();
   const cells = await getAreaGenreMatrix(days);
-  const suppressed = cells.map(c => ({
-    ...c,
-    fillRate: c.activeMeals ? c.matchedMeals / c.activeMeals : 0,
-    dataSufficient: c.demandIntents + c.activeMeals >= MIN_BUSINESS_SAMPLE_SIZE,
-  }));
+  const suppressed = cells
+    .map(c => ({ ...c, fillRate: c.activeMeals ? c.matchedMeals / c.activeMeals : 0, dataSufficient: c.demandIntents + c.activeMeals >= MIN_BUSINESS_SAMPLE_SIZE }))
+    .sort((a, b) => b.demandIntents - a.demandIntents)
+    .slice(0, limit);
   const areas = [...new Set(suppressed.map(c => c.area))];
   const genres = [...new Set(suppressed.map(c => c.genre))];
   return { cells: suppressed, areas, genres };
@@ -54,19 +54,22 @@ export async function getAreaGenreDashboard(days: number) {
 
 // Opportunity Score = 需要件数 + 供給不足分(需要-供給の不足)×2 + 過去の成立実績×1。
 // 複雑なAIモデルは使わず、この加重和のみで説明可能にしている。
-function opportunityScore(c: { demandIntents: number; activeMeals: number; completedMeals: number }) {
+export function computeOpportunityScore(c: { demandIntents: number; activeMeals: number; completedMeals: number }) {
   const gap = Math.max(0, c.demandIntents - c.activeMeals);
   return c.demandIntents * 1 + gap * 2 + c.completedMeals * 1;
 }
 
-export async function getOpportunityRanking(days: number, limit = 10) {
-  await requireAdmin();
-  const cells = await getAreaGenreMatrix(days);
+export function rankOpportunity(cells: Cell[], limit: number) {
   return cells
     .filter(c => c.demandIntents + c.activeMeals >= MIN_BUSINESS_SAMPLE_SIZE)
-    .map(c => ({ ...c, fillRate: c.activeMeals ? c.matchedMeals / c.activeMeals : 0, opportunityScore: opportunityScore(c) }))
+    .map(c => ({ ...c, fillRate: c.activeMeals ? c.matchedMeals / c.activeMeals : 0, opportunityScore: computeOpportunityScore(c) }))
     .sort((a, b) => b.opportunityScore - a.opportunityScore)
     .slice(0, limit);
+}
+
+export async function getOpportunityRanking(days: number, limit = 10) {
+  await requireAdmin();
+  return rankOpportunity(await getAreaGenreMatrix(days), limit);
 }
 
 export async function getSalesSummary(days: number) {
@@ -77,7 +80,7 @@ export async function getSalesSummary(days: number) {
   // previousは「過去2期間分」の集計のため、前期間だけの値は 全体-当期間 で概算する。
   const top = current
     .filter(c => c.demandIntents + c.activeMeals >= MIN_BUSINESS_SAMPLE_SIZE)
-    .map(c => ({ ...c, opportunityScore: opportunityScore(c) }))
+    .map(c => ({ ...c, opportunityScore: computeOpportunityScore(c) }))
     .sort((a, b) => b.opportunityScore - a.opportunityScore)
     .slice(0, 5);
   return top.map(c => {
