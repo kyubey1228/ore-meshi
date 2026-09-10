@@ -27,6 +27,7 @@ export function MealShareActions({ mealId, area, genre, text, url }: Props) {
   const previewUrl = `/api/ugc/meals/${encodeURIComponent(mealId)}?style=${ugcStyle}`;
   const xText = text.replace(url, xUrl);
   const lineText = text.replace(url, lineUrl);
+  const previewLines = text.split('\n').map(line => line.trim()).filter(Boolean);
 
   function share(shareType: 'x' | 'line' | 'url_copy' | 'web_share') {
     trackGrowthEvent('RECRUITMENT_SHARED', { ...payload, shareType });
@@ -58,7 +59,7 @@ export function MealShareActions({ mealId, area, genre, text, url }: Props) {
 
   return (
     <div className="share-actions-wrap">
-      <UgcStylePicker value={ugcStyle} onChange={setUgcStyle} previewUrl={previewUrl} />
+      <UgcStylePicker value={ugcStyle} onChange={setUgcStyle} previewTitle={previewLines[0] ?? '誰か、飯いかん？'} previewDetail={previewLines.slice(1, 3).join(' · ') || area} />
       <div className="share-actions">
         <a className="btn dark-btn" href={`https://x.com/intent/tweet?${new URLSearchParams({ text: xText }).toString()}`} target="_blank" rel="noopener noreferrer" onClick={() => share('x')}>
           <Share2 size={17} />Xで共有

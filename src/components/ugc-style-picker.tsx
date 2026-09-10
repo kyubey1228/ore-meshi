@@ -3,10 +3,11 @@
 import { Shuffle } from 'lucide-react';
 import { getUgcStyle, RANDOM_UGC_STYLES, UGC_STYLES, type UgcStyle } from '@/lib/ugc';
 
-export function UgcStylePicker({ value, onChange, previewUrl }: {
+export function UgcStylePicker({ value, onChange, previewTitle = '飯の誘いが届いています。', previewDetail = '誰かと食べるきっかけを。' }: {
   value: UgcStyle;
   onChange: (style: UgcStyle) => void;
-  previewUrl: string;
+  previewTitle?: string;
+  previewDetail?: string;
 }) {
   const selectedStyle = getUgcStyle(value);
 
@@ -21,10 +22,9 @@ export function UgcStylePicker({ value, onChange, previewUrl }: {
         <div><strong>シェア画像を選ぶ</strong><p className="muted">漫画カードがXやLINEのリンクに付きます。</p></div>
         <button className="btn secondary small" type="button" onClick={randomize}><Shuffle size={16} />おまかせで変える</button>
       </div>
-      <div className="ugc-preview-frame" style={{ backgroundImage: `url(${selectedStyle.image})` }}>
-        {/* 背景を即時表示し、APIが生成した最終OGPを読み込み次第重ねる。本番でAPIが失敗しても素材は残る。 */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img key={previewUrl} className="ugc-preview" src={previewUrl} alt={`「${selectedStyle.label}」のシェア画像プレビュー`} width={600} height={315} onError={event => { event.currentTarget.style.display = 'none'; }} />
+      <div className="ugc-preview-frame" style={{ backgroundImage: `linear-gradient(180deg,transparent 20%,rgba(16,12,9,.88)),url(${selectedStyle.image})` }} role="img" aria-label={`「${selectedStyle.label}」のシェア画像プレビュー`}>
+        <span className="ugc-preview-brand" style={{ backgroundColor: selectedStyle.accent }}>🍚 俺は誰かと飯が食いたい！</span>
+        <div className="ugc-preview-copy" style={{ borderColor: selectedStyle.accent }}><strong>{previewTitle}</strong><span>{previewDetail}</span></div>
       </div>
       <div className="ugc-options" role="radiogroup" aria-label="シェア画像のテイスト">
         {UGC_STYLES.map(style => (
