@@ -36,6 +36,7 @@ export default async function MealDetail({params}:Props){
     <div className={`panel detail${meal.status==='OPEN'&&remaining===1?' last-slot':''}`}>
       <div className="row between wrap"><span className="tag">{mealStatusLabels[meal.status]}</span><XShareButton href={shareHref} label={shareLabel}/></div>
       {meal.status==='OPEN'&&remaining===1&&<p className="last-slot-label">🔥 あと1人で飯決定！</p>}
+      {meal.sponsoredMeals[0]&&<p className="last-slot-label">PR · 提供:{meal.sponsoredMeals[0].sponsorName}{meal.sponsoredMeals[0].benefit?` / ${meal.sponsoredMeals[0].benefit}`:''}</p>}
       <h1>{meal.title}</h1>
       <TagPills tags={meal.purposes.map(({purpose})=>purpose)} tone="orange"/>
       <Link className="person" href={`/users/${meal.host.id}`}><UserAvatar user={meal.host}/><span><strong>{meal.host.displayName}</strong><small>@{meal.host.twitterUsername}</small></span></Link>

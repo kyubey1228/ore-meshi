@@ -11,7 +11,7 @@ export async function getMealList(input: unknown = {}) {
   const parsed=filterSchema.safeParse(input); const filters=parsed.success?parsed.data:{};
   if(!process.env.DATABASE_URL) return [];
   const where: Prisma.MealWhereInput={status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}],...(filters.area?{area:{contains:filters.area,mode:'insensitive'}}:{}),...(filters.paymentType?{paymentType:filters.paymentType}:{}),...(typeof filters.budget==='number'?{budgetMax:{lte:filters.budget}}:{}),...(filters.date?{candidates:{some:{date:new Date(filters.date)}}}:{}),...(filters.purpose?{purposes:{some:{purpose:{slug:filters.purpose,isActive:true}}}}:{})};
-  const meals=await prisma.meal.findMany({where,orderBy:{createdAt:'desc'},take:100,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}});
+  const meals=await prisma.meal.findMany({where,orderBy:{createdAt:'desc'},take:100,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
   return meals.sort((a,b)=>{
     const aRemaining=a.maxParticipants-(a._count.joinRequests+1),bRemaining=b.maxParticipants-(b._count.joinRequests+1);
     const boost=Number(bRemaining===1)-Number(aRemaining===1);if(boost)return boost;
@@ -22,7 +22,7 @@ export async function getMealList(input: unknown = {}) {
 export async function getMealById(raw: string){
   const id=idSchema.safeParse(raw); if(!id.success || !process.env.DATABASE_URL)return null;
   const userId=await currentUserId();
-  const meal=await prisma.meal.findUnique({where:{id:id.data},include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}});
+  const meal=await prisma.meal.findUnique({where:{id:id.data},include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
   if(!meal)return null;
   // Applicants' messages are visible only to the host and the applicant.
   const requests=userId?await prisma.joinRequest.findMany({where:{mealId:meal.id,...(meal.hostId===userId?{}:{userId})},include:{user:{select:publicUser},candidate:true},orderBy:{createdAt:'asc'}}):[];
@@ -32,6 +32,14 @@ export async function getMealById(raw: string){
 export async function getMealShareData(raw:string){
   const id=idSchema.safeParse(raw);if(!id.success||!process.env.DATABASE_URL)return null;
   return prisma.meal.findUnique({where:{id:id.data},select:{id:true,title:true,description:true,area:true,budgetMin:true,budgetMax:true,paymentType:true,maxParticipants:true,status:true,candidates:{orderBy:[{date:'asc'},{startTime:'asc'}],take:1,select:{date:true,startTime:true,endTime:true}},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}});
+}
+export async function getActiveStandaloneSponsoredMeals(area?: string){
+  if(!process.env.DATABASE_URL) return [];
+  return prisma.sponsoredMeal.findMany({where:{status:'ACTIVE',mealId:null,startsAt:{gt:new Date()},...(area?{area:{contains:area,mode:'insensitive'}}:{})},orderBy:{startsAt:'asc'},take:12,select:{id:true,title:true,sponsorName:true,restaurantName:true,area:true,startsAt:true,remainingSlots:true,benefit:true}});
+}
+export async function getActiveSeatCampaigns(area?: string){
+  if(!process.env.DATABASE_URL) return [];
+  return prisma.seatCampaign.findMany({where:{status:'ACTIVE',endsAt:{gt:new Date()},...(area?{area:{contains:area,mode:'insensitive'}}:{})},orderBy:{endsAt:'asc'},take:12,select:{id:true,restaurantName:true,area:true,remainingSeats:true,endsAt:true,benefit:true}});
 }
 export async function getUserProfileData(raw: string){
   const parsed=idSchema.safeParse(raw);if(!parsed.success || !process.env.DATABASE_URL)return null;
