@@ -8,12 +8,18 @@ import type { Prisma } from '@prisma/client';
 import { rankMeals, type RankingContext } from '@/lib/meal-ranking';
 export const publicUser = { id:true, twitterUsername:true, displayName:true, image:true, bio:true, createdAt:true,diningTypes:{where:{diningType:{isActive:true}},orderBy:{diningType:{sortOrder:'asc'}},select:{diningType:{select:{id:true,slug:true,label:true}}}} } satisfies Prisma.UserSelect;
 export async function getCurrentUser(){const id=await currentUserId();return id?prisma.user.findUnique({where:{id},select:publicUser}):null;}
-export async function getDiningTypes(){return prisma.diningType.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{label:'asc'}],select:{id:true,slug:true,label:true}});}
-// 目的タグはほぼ更新されない参照データなので長めにキャッシュする(DB接続経路のレイテンシが大きいため、
-// 変化がほぼ無いデータほど積極的にキャッシュして往復回数を減らす)。
+// 飯タイプ/目的タグは管理画面がなく、実質デプロイ時にしか変わらない参照データ。
+// idは実在のDB行(MealPurpose/DiningType)を指し、募集作成・プロフィール編集で本物のIDかDB側検証を通すため、
+// 値を静的にハードコードすることはできない(検証が必ず通るとは限らずデータ不整合の原因になる)。
+// そのためrevalidate:falseで「次のデプロイまでキャッシュを使い回す」デフォルト値的な扱いにし、
+// DB接続のレイテンシが大きい環境での往復をほぼゼロにする。運用でタグを変えたい場合は再デプロイすれば反映される。
+export const getDiningTypes = unstable_cache(
+  () => prisma.diningType.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{label:'asc'}],select:{id:true,slug:true,label:true}}),
+  ['dining-types'], { revalidate: false },
+);
 export const getMealPurposes = unstable_cache(
   () => prisma.mealPurpose.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{label:'asc'}],select:{id:true,slug:true,label:true}}),
-  ['meal-purposes'], { revalidate: 300 },
+  ['meal-purposes'], { revalidate: false },
 );
 export async function getNotifications(limit=30){
   const userId=await requirePageUser();
