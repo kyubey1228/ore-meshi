@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { businessPostingMembership } from '@/server/business';
 import { getAreaGenreMatrix, rankOpportunity } from '@/server/business-intelligence';
+import { getAreaOptions } from '@/lib/data';
 import { AreaSponsorshipForm } from '@/components/business/area-sponsorship-form';
 import { BusinessMarketingTracker } from '@/components/business-marketing-tracker';
 
@@ -11,11 +12,14 @@ export default async function NewAreaSponsorship() {
   const membership = await businessPostingMembership().catch(() => null);
   if (!membership) redirect('/business/onboarding');
   // Opportunity Rankingの計算そのもの(area/genre/スコアのみ、個人データなし)を営業提案の候補提示として再利用する。
-  const cells = await getAreaGenreMatrix(30).catch(() => []);
+  const [cells, areaOptions] = await Promise.all([
+    getAreaGenreMatrix(30).catch(() => []),
+    getAreaOptions(),
+  ]);
   const suggestions = rankOpportunity(cells, 5);
 
   return (
-    <section className="section narrow">
+    <section className="section">
       <BusinessMarketingTracker eventType="SPONSOR_PRODUCT_VIEW" content="AREA_FEATURED" />
       <Link className="text-link" href="/business/area-sponsorship">← エリアスポンサー一覧</Link>
       <h1>エリアスポンサーを出す</h1>
@@ -23,6 +27,7 @@ export default async function NewAreaSponsorship() {
       <AreaSponsorshipForm
         businessAccountId={membership.businessAccountId}
         defaultArea={membership.businessAccount.area ?? ''}
+        areaOptions={areaOptions}
         suggestions={suggestions.map(s => ({ area: s.area, genre: s.genre }))}
       />
     </section>

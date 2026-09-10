@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { businessPostingMembership } from '@/server/business';
 import { getBusinessPricingCatalog } from '@/server/billing';
+import { getAreaOptions } from '@/lib/data';
 import { prisma } from '@/lib/prisma';
 import { SponsoredMealWizard } from '@/components/business/sponsored-meal-wizard';
 import { BusinessMarketingTracker } from '@/components/business-marketing-tracker';
@@ -12,13 +13,14 @@ export default async function NewSponsoredMeal({ searchParams }: { searchParams:
   const membership = await businessPostingMembership().catch(() => null);
   if (!membership) redirect('/business/onboarding');
   const { repeat } = await searchParams;
-  const [catalog, source] = await Promise.all([
+  const [catalog, source, areaOptions] = await Promise.all([
     getBusinessPricingCatalog(),
     // 他社Campaignをコピーできないよう、必ず自分のbusinessAccountId範囲でのみ検索する。
     repeat ? prisma.sponsoredMeal.findFirst({ where: { id: repeat, businessAccountId: membership.businessAccountId } }) : Promise.resolve(null),
+    getAreaOptions(),
   ]);
   return (
-    <section className="section narrow">
+    <section className="section">
       <BusinessMarketingTracker eventType="SPONSOR_PRODUCT_VIEW" content="SPONSORED_MEAL" />
       <Link className="text-link" href="/business/sponsored-meals">← スポンサー飯一覧</Link>
       <h1>{source ? '同じ条件でもう一度スポンサー飯を出す' : 'スポンサー飯を出す'}</h1>
@@ -29,6 +31,7 @@ export default async function NewSponsoredMeal({ searchParams }: { searchParams:
         defaultRestaurantName={membership.businessAccount.name}
         defaultArea={membership.businessAccount.area ?? ''}
         priceYen={catalog ? catalog.sponsoredMeal.toLocaleString('ja-JP') : '5,000'}
+        areaOptions={areaOptions}
         repeatDefaults={source ? { title: source.title, restaurantName: source.restaurantName, area: source.area, genre: source.genre ?? '', benefit: source.benefit, description: source.description, participantLimit: source.participantLimit } : undefined}
       />
     </section>

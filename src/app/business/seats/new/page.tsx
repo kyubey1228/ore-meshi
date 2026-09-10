@@ -12,7 +12,7 @@ export default async function NewSeatCampaign() {
   if (!membership) redirect('/business/onboarding');
   const catalog = await getBusinessPricingCatalog();
   return (
-    <section className="section narrow">
+    <section className="section">
       <BusinessMarketingTracker eventType="SPONSOR_PRODUCT_VIEW" content="SEAT_CAMPAIGN" />
       <Link className="text-link" href="/business/seats">← 空席スポンサー一覧</Link>
       <h1>今、席空いてます</h1>

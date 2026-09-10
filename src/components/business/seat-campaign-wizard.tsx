@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBusinessCampaign } from '@/server/actions/business';
+import { generateSeatCampaignPost } from '@/features/x-sharing/templates';
 
 type BenefitKind = 'NONE' | 'DRINK' | 'DISCOUNT' | 'CUSTOM';
 const BENEFIT_LABEL: Record<BenefitKind, string> = { NONE: 'なし', DRINK: 'ドリンク1杯', DISCOUNT: '500円引き', CUSTOM: '自由入力' };
@@ -13,6 +14,15 @@ type Props = { businessAccountId: string; restaurantName: string; area: string; 
 function minutesFromNow(minutes: number) {
   const date = new Date(Date.now() + minutes * 60 * 1000);
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function endsAtDate(endsAtTime: string) {
+  if (!endsAtTime) return undefined;
+  const now = new Date();
+  const [hours, minutes] = endsAtTime.split(':').map(Number);
+  const endsAt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+  if (endsAt <= now) endsAt.setDate(endsAt.getDate() + 1);
+  return endsAt;
 }
 
 export function SeatCampaignWizard({ businessAccountId, restaurantName, area, priceYen }: Props) {
@@ -32,10 +42,8 @@ export function SeatCampaignWizard({ businessAccountId, restaurantName, area, pr
     if (!seats) return;
     setError('');
     start(async () => {
-      const now = new Date();
-      const [hours, minutes] = endsAtTime.split(':').map(Number);
-      const endsAt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
-      if (endsAt <= now) endsAt.setDate(endsAt.getDate() + 1);
+      const endsAt = endsAtDate(endsAtTime);
+      if (!endsAt) return;
       const result = await createBusinessCampaign({
         businessAccountId,
         kind: 'SEAT_CAMPAIGN',
@@ -43,7 +51,7 @@ export function SeatCampaignWizard({ businessAccountId, restaurantName, area, pr
         restaurantName,
         area,
         benefit,
-        startsAt: now.toISOString(),
+        startsAt: new Date().toISOString(),
         endsAt: endsAt.toISOString(),
         participantLimit: seats,
         remaining: seats,
@@ -54,22 +62,29 @@ export function SeatCampaignWizard({ businessAccountId, restaurantName, area, pr
     });
   }
 
-  return (
-    <div className="panel seat-wizard">
-      <section>
-        <h3>今、何席空いてる?</h3>
-        <div className="tap-grid">
-          {SEAT_OPTIONS.map(n => (
-            <button key={n} type="button" className={`chip ${seats === n && !isFivePlus ? 'selected' : ''}`} onClick={() => { setSeats(n); setIsFivePlus(false); }}>{n}</button>
-          ))}
-          <button type="button" className={`chip ${isFivePlus ? 'selected' : ''}`} onClick={() => { setIsFivePlus(true); setSeats(5); }}>5+</button>
-        </div>
-        {isFivePlus && (
-          <label>正確な席数<input type="number" min={5} max={100} value={seats ?? 5} onChange={e => setSeats(Number(e.target.value))} /></label>
-        )}
-      </section>
+  const previewText = seats
+    ? generateSeatCampaignPost(
+        { id: 'preview', kind: 'SEAT_CAMPAIGN', businessAccountId, businessName: restaurantName, title: '今、席空いてます', restaurantName, area, endsAt: endsAtDate(endsAtTime), remaining: seats, benefit, status: 'DRAFT' },
+        '（作成後にURLが入ります）',
+      )
+    : '席数を選ぶと、X投稿イメージがリアルタイムに更新されます。';
 
-      {seats !== null && (
+  return (
+    <div className="preview-split">
+      <div className="panel seat-wizard">
+        <section>
+          <h3>今、何席空いてる?</h3>
+          <div className="tap-grid">
+            {SEAT_OPTIONS.map(n => (
+              <button key={n} type="button" className={`chip ${seats === n && !isFivePlus ? 'selected' : ''}`} onClick={() => { setSeats(n); setIsFivePlus(false); }}>{n}</button>
+            ))}
+            <button type="button" className={`chip ${isFivePlus ? 'selected' : ''}`} onClick={() => { setIsFivePlus(true); setSeats(5); }}>5+</button>
+          </div>
+          {isFivePlus && (
+            <label>正確な席数<input type="number" min={5} max={100} value={seats ?? 5} onChange={e => setSeats(Number(e.target.value))} /></label>
+          )}
+        </section>
+
         <section>
           <h3>何時まで?</h3>
           <div className="time-grid">
@@ -79,9 +94,7 @@ export function SeatCampaignWizard({ businessAccountId, restaurantName, area, pr
           </div>
           <label>時刻を指定<input type="time" value={endsAtTime} onChange={e => setEndsAtTime(e.target.value)} /></label>
         </section>
-      )}
 
-      {endsAtTime && (
         <section>
           <h3>特典つける?</h3>
           <div className="tag-selector">
@@ -91,16 +104,17 @@ export function SeatCampaignWizard({ businessAccountId, restaurantName, area, pr
           </div>
           {benefitKind === 'CUSTOM' && <textarea value={benefitText} onChange={e => setBenefitText(e.target.value)} maxLength={120} rows={2} placeholder="例:生ビール半額" />}
         </section>
-      )}
+      </div>
 
-      {ready && (
-        <section>
-          <h3>空席スポンサー ¥{priceYen}</h3>
-          <button className="btn wide" type="button" disabled={pending} onClick={submit}>{pending ? '作成しています…' : '今すぐ客を呼ぶ'}</button>
-          {error && <p role="alert" className="error">{error}</p>}
-          <p className="muted">下書きが作成されます。実際の支払いは次の一覧画面から行います。</p>
-        </section>
-      )}
+      <div className="panel">
+        <h3>Xではこんな感じ</h3>
+        <div className="x-post-preview"><p className="pre-wrap">{previewText}</p></div>
+
+        <h3>空席スポンサー ¥{priceYen}</h3>
+        <button className="btn wide" type="button" disabled={!ready || pending} onClick={submit}>{pending ? '作成しています…' : '今すぐ客を呼ぶ'}</button>
+        {error && <p role="alert" className="error">{error}</p>}
+        <p className="muted">下書きが作成されます。実際の支払いは次の一覧画面から行います。</p>
+      </div>
     </div>
   );
 }

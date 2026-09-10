@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { businessPostingMembership } from '@/server/business';
+import { getAreaOptions } from '@/lib/data';
 import { CouponForm } from '@/components/business/coupon-form';
 
 export const metadata = { title: 'クーポンを作る' };
@@ -8,8 +9,9 @@ export const metadata = { title: 'クーポンを作る' };
 export default async function NewCoupon() {
   const membership = await businessPostingMembership().catch(() => null);
   if (!membership) redirect('/business/onboarding');
+  const areaOptions = await getAreaOptions();
   return (
-    <section className="section narrow">
+    <section className="section">
       <Link className="text-link" href="/business/coupons">← クーポン一覧</Link>
       <h1>クーポンを作る</h1>
       <p className="muted">支払いは不要です。作成するとすぐ公開されます。</p>
@@ -17,6 +19,7 @@ export default async function NewCoupon() {
         businessAccountId={membership.businessAccountId}
         defaultRestaurantName={membership.businessAccount.name}
         defaultArea={membership.businessAccount.area ?? ''}
+        areaOptions={areaOptions}
       />
     </section>
   );
