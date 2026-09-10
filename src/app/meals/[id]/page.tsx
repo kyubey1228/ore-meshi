@@ -24,16 +24,19 @@ import { ReferralClickRecorder } from '@/components/referral-click-recorder';
 import { RecentlyViewedRecorder } from '@/components/recently-viewed-recorder';
 import { MobileStickyJoinBar } from '@/components/mobile-sticky-join-bar';
 import { appUrl, matchedShareText, mealShareText, mealUrl, remainingSlots, shareTextForViewer, truncate } from '@/lib/social';
+import { isUgcStyle } from '@/lib/ugc';
 
 type Props={params:Promise<{id:string}>;searchParams:Promise<{ref?:string}>};
 const alt='「俺は誰かと飯が食いたい！」の飯募集';
-export async function generateMetadata({params}:{params:Promise<{id:string}>}):Promise<Metadata>{
-  const {id}=await params;const meal=await getMealShareData(id);
+export async function generateMetadata({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{ugc_style?:string}>}):Promise<Metadata>{
+  const [{id},query]=await Promise.all([params,searchParams]);const meal=await getMealShareData(id);
   if(!meal)return {title:'飯募集が見つかりません'};
   const remaining=remainingSlots(meal);
   const state=meal.status==='OPEN'?(remaining===1?'あと1人！':`あと${remaining}人`):meal.status==='MATCHED'?'飯、決まった。':mealStatusLabels[meal.status];
   const description=truncate(`${state} ${meal.area}で「${meal.title}」 #誰か飯いこ`,120);
-  const image=`${appUrl()}/meals/${encodeURIComponent(id)}/opengraph-image`;
+  const image=isUgcStyle(query.ugc_style)
+    ?`${appUrl()}/api/ugc/meals/${encodeURIComponent(id)}?style=${query.ugc_style}`
+    :`${appUrl()}/meals/${encodeURIComponent(id)}/opengraph-image`;
   const url=mealUrl(id);
   const indexable=meal.status==='OPEN'||meal.status==='MATCHED';
   return {

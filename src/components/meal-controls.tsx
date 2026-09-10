@@ -7,6 +7,7 @@ import { createJoinRequest, cancelJoinRequest, decideJoinRequest } from '@/serve
 import { setMealStatus } from '@/server/actions/meals';
 import type { ActionResult } from '@/server/action';
 import { trackGrowthEvent } from '@/components/growth-tracker';
+import { initialUgcStyle, withUgcStyle } from '@/lib/ugc';
 
 export function JoinForm({mealId,area,genre,candidates}:{mealId:string;area:string;genre:string|null;candidates:{id:string;label:string}[]}){
   const payload={recruitmentId:mealId,area,foodCategory:genre??undefined,loggedIn:true};
@@ -19,7 +20,7 @@ export function RequestDecision({id,mealId}:{id:string;mealId:string}){
   function reportOnX(){
     if(!result?.meal)return;
     const date=new Intl.DateTimeFormat('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Tokyo'}).format(new Date(result.meal.scheduledAt));
-    const url=new URL(`/meals/${mealId}`,window.location.origin).toString();
+    const url=withUgcStyle(new URL(`/meals/${mealId}`,window.location.origin).toString(),initialUgcStyle(mealId));
     const text=['飯、決まった。','',date,`${result.meal.area}で${result.meal.title}`,'',`${result.meal.participantCount}人で飯に行くことになりました。`,'','#誰か飯いこ',url].join('\n');
     window.open(`https://x.com/intent/tweet?${new URLSearchParams({text}).toString()}`,'_blank','noopener,noreferrer');
   }

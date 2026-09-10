@@ -3,6 +3,8 @@ import { useState, useSyncExternalStore } from 'react';
 import { Copy, Share2 } from 'lucide-react';
 import { trackGrowthEvent } from '@/components/growth-tracker';
 import { withUtm } from '@/lib/social';
+import { UgcStylePicker } from '@/components/ugc-style-picker';
+import { initialUgcStyle, withUgcStyle } from '@/lib/ugc';
 
 function subscribeNever() { return () => {}; }
 function getWebShareSupport() { return typeof navigator !== 'undefined' && typeof navigator.share === 'function'; }
@@ -12,15 +14,17 @@ type Props = { mealId: string; area: string; genre: string | null; text: string;
 export function MealShareActions({ mealId, area, genre, text, url }: Props) {
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [ugcStyle, setUgcStyle] = useState(() => initialUgcStyle(mealId));
   // navigator.shareの有無はSSR/CSRで結果が異なりうるため、useSyncExternalStoreでサーバーは常にfalseとしハイドレーション不一致を避ける。
   const canWebShare = useSyncExternalStore(subscribeNever, getWebShareSupport, () => false);
   const payload = { recruitmentId: mealId, area, foodCategory: genre ?? undefined };
 
-  const xUrl = withUtm(url, 'x', 'social');
-  const lineUrl = withUtm(url, 'line', 'social');
-  const copyUrl_ = withUtm(url, 'share', 'copy');
-  const webShareUrl = withUtm(url, 'share', 'web_share');
-  const qrUrl = withUtm(url, 'share', 'qr');
+  const xUrl = withUgcStyle(withUtm(url, 'x', 'social'), ugcStyle);
+  const lineUrl = withUgcStyle(withUtm(url, 'line', 'social'), ugcStyle);
+  const copyUrl_ = withUgcStyle(withUtm(url, 'share', 'copy'), ugcStyle);
+  const webShareUrl = withUgcStyle(withUtm(url, 'share', 'web_share'), ugcStyle);
+  const qrUrl = withUgcStyle(withUtm(url, 'share', 'qr'), ugcStyle);
+  const previewUrl = `/api/ugc/meals/${encodeURIComponent(mealId)}?style=${ugcStyle}`;
   const xText = text.replace(url, xUrl);
   const lineText = text.replace(url, lineUrl);
 
@@ -54,6 +58,7 @@ export function MealShareActions({ mealId, area, genre, text, url }: Props) {
 
   return (
     <div className="share-actions-wrap">
+      <UgcStylePicker value={ugcStyle} onChange={setUgcStyle} previewUrl={previewUrl} />
       <div className="share-actions">
         <a className="btn dark-btn" href={`https://x.com/intent/tweet?${new URLSearchParams({ text: xText }).toString()}`} target="_blank" rel="noopener noreferrer" onClick={() => share('x')}>
           <Share2 size={17} />Xで共有
@@ -68,6 +73,7 @@ export function MealShareActions({ mealId, area, genre, text, url }: Props) {
           <button className="btn secondary" type="button" onClick={webShare}>共有する</button>
         )}
         <button className="btn secondary" type="button" onClick={() => setShowQr(v => !v)} aria-expanded={showQr}>QRコード</button>
+        <a className="btn secondary" href={`${previewUrl}&download=1`} download>画像を保存</a>
       </div>
       {showQr && (
         <div className="share-qr">

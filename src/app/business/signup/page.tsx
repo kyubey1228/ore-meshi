@@ -3,8 +3,15 @@ import { requireBusinessPageUser } from '@/server/auth';
 import { currentBusinessMembership } from '@/server/business';
 import { BusinessSignupForm } from '@/components/business-signup-form';
 import { BusinessMarketingTracker } from '@/components/business-marketing-tracker';
+import type { Metadata } from 'next';
+import { appUrl } from '@/lib/social';
+import { isUgcStyle } from '@/lib/ugc';
 
-export const metadata = { title: '店舗・企業登録' };
+export async function generateMetadata({ searchParams }: { searchParams: Promise<{ ugc_style?: string }> }): Promise<Metadata> {
+  const query = await searchParams;
+  const image = isUgcStyle(query.ugc_style) ? `${appUrl()}/api/ugc/invite?style=${query.ugc_style}` : undefined;
+  return { title: '店舗・企業登録', ...(image ? { openGraph: { images: [image] }, twitter: { card: 'summary_large_image', images: [image] } } : {}) };
+}
 
 export default async function Signup({ searchParams }: { searchParams: Promise<{ ref?: string; partner?: string }> }) {
   await requireBusinessPageUser('/business/signup');
