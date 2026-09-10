@@ -60,24 +60,32 @@ const sampleMealSeeds = [
   ['新宿で煮干しラーメン食いたい','新宿','ラーメン',1000,1800],['渋谷でスパイスカレー開拓','渋谷','カレー',1200,2200],['上野で昼から寿司どう？','上野','寿司',3000,6000],['池袋で餃子とビール','池袋','中華',2000,4000],['吉祥寺の喫茶店でプリン','吉祥寺','カフェ',1000,2500],['恵比寿で焼肉いこう','恵比寿','焼肉',5000,9000],['神田の老舗そばで昼飯','神田','そば',800,1800],['中野で町中華を攻めたい','中野','中華',1500,3000],['下北沢で夜カレー','下北沢','カレー',1200,2500],['浅草でもんじゃ食べよう','浅草','もんじゃ',2500,4500],
 ] as const;
 const shifted = (days: number, hour = 19) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(hour,0,0,0); return d; };
+// 本番DBはconnection_limit=1(Transaction Pooler)のため、Promise.allでの並行クエリは
+// 接続プールの奪い合いでタイムアウトする(P2024)。seedは頻繁に実行しないため、
+// 素朴に直列実行して確実性を優先する。
+async function seedSequential<T,R>(items:readonly T[],fn:(item:T,index:number)=>Promise<R>):Promise<R[]>{
+  const results:R[]=[];
+  for(let i=0;i<items.length;i++)results.push(await fn(items[i],i));
+  return results;
+}
 async function main() {
-  const diningTypes=await Promise.all(diningTypeSeeds.map(([slug,label],index)=>prisma.diningType.upsert({where:{slug},create:{slug,label,sortOrder:(index+1)*10},update:{label,sortOrder:(index+1)*10,isActive:true}})));
-  const purposes=await Promise.all(purposeSeeds.map(([slug,label],index)=>prisma.mealPurpose.upsert({where:{slug},create:{slug,label,sortOrder:(index+1)*10},update:{label,sortOrder:(index+1)*10,isActive:true}})));
-  await Promise.all(areaSeeds.map(([prefecture,city],index)=>prisma.areaOption.upsert({where:{prefecture_city:{prefecture,city}},create:{prefecture,city,sortOrder:(index+1)*10},update:{sortOrder:(index+1)*10,isActive:true}})));
+  const diningTypes=await seedSequential(diningTypeSeeds,([slug,label],index)=>prisma.diningType.upsert({where:{slug},create:{slug,label,sortOrder:(index+1)*10},update:{label,sortOrder:(index+1)*10,isActive:true}}));
+  const purposes=await seedSequential(purposeSeeds,([slug,label],index)=>prisma.mealPurpose.upsert({where:{slug},create:{slug,label,sortOrder:(index+1)*10},update:{label,sortOrder:(index+1)*10,isActive:true}}));
+  await seedSequential(areaSeeds,([prefecture,city],index)=>prisma.areaOption.upsert({where:{prefecture_city:{prefecture,city}},create:{prefecture,city,sortOrder:(index+1)*10},update:{sortOrder:(index+1)*10,isActive:true}}));
   // Cascade relations let us refresh demo records without touching real users or their meals.
   await prisma.businessAccount.deleteMany({where:{slug:{startsWith:'seed-'}}});
   await prisma.businessLead.deleteMany({where:{email:{endsWith:'@seed.example'}}});
   await prisma.firstTimeOffer.deleteMany({where:{name:{startsWith:'[SEED]'}}});
   await prisma.partnerCampaign.deleteMany({where:{slug:{startsWith:'seed-'}}});
   await prisma.user.deleteMany({where:{twitterId:{startsWith:'seed-'}}});
-  const users = await Promise.all(userSeeds.map(([twitterId,twitterUsername,displayName,bio],index) => prisma.user.create({data:{twitterId,twitterUsername,displayName,bio,image:`https://api.dicebear.com/9.x/thumbs/svg?seed=${twitterUsername}`,diningTypes:{create:[diningTypes[index%diningTypes.length],diningTypes[(index+2)%diningTypes.length],diningTypes[(index+5)%diningTypes.length]].map(type=>({diningTypeId:type.id}))}}})));
+  const users = await seedSequential(userSeeds,([twitterId,twitterUsername,displayName,bio],index) => prisma.user.create({data:{twitterId,twitterUsername,displayName,bio,image:`https://api.dicebear.com/9.x/thumbs/svg?seed=${twitterUsername}`,diningTypes:{create:[diningTypes[index%diningTypes.length],diningTypes[(index+2)%diningTypes.length],diningTypes[(index+5)%diningTypes.length]].map(type=>({diningTypeId:type.id}))}}}));
   await prisma.user.update({where:{id:users[0].id},data:{isAdmin:true}});
   const business=await prisma.businessAccount.create({data:{name:'シード食堂',legalName:'シード食堂株式会社',slug:'seed-restaurant',businessType:'RESTAURANT',contactName:'飯田 店長',contactEmail:'owner@seed.example',area:'新宿',status:'ACTIVE',purposes:['新規集客','空席対策'],members:{create:{userId:users[0].id,role:'OWNER',canPostToSocial:true}},socialPostSettings:{create:{}}}});
   const partner=await prisma.partnerCampaign.create({data:{slug:'seed-shinjuku-partner',title:'新宿エリア先行10店舗募集',description:'新宿の飯を一緒に増やす立ち上げパートナー募集です。',area:'新宿',startsAt:shifted(-5),endsAt:shifted(30),maxPartners:10,joinedPartners:1,offerText:'初回空席スポンサー無料',status:'ACTIVE',members:{create:{businessAccountId:business.id}}}});
   await prisma.firstTimeOffer.create({data:{name:'[SEED] 空席スポンサー初回無料',offerType:'FREE',targetProduct:'SEAT_CAMPAIGN',startsAt:shifted(-5),endsAt:shifted(30),maxUses:10}});
   await prisma.businessReferral.create({data:{referrerBusinessAccountId:business.id,referralCode:'SEEDMESHI1'}});
   const leadStatuses=['NEW','CONTACTED','WON','LOST'] as const;
-  const leads=await Promise.all(leadStatuses.map((status,index)=>prisma.businessLead.create({data:{companyName:`シード企業 ${index+1}`,contactName:`担当者 ${index+1}`,email:`lead${index+1}@seed.example`,businessType:index%2?'COMPANY':'RESTAURANT',area:index%2?'渋谷':'新宿',purpose:'スポンサー施策について相談したい',monthlyBudgetRange:'1〜3万円',message:'デモ確認用の営業Leadです。',source:index===0?'BUSINESS_LP':index===1?'PRICING':index===2?'PARTNER_CAMPAIGN':'DIRECT',status,partnerCampaignId:index===2?partner.id:null}})));
+  const leads=await seedSequential(leadStatuses,(status,index)=>prisma.businessLead.create({data:{companyName:`シード企業 ${index+1}`,contactName:`担当者 ${index+1}`,email:`lead${index+1}@seed.example`,businessType:index%2?'COMPANY':'RESTAURANT',area:index%2?'渋谷':'新宿',purpose:'スポンサー施策について相談したい',monthlyBudgetRange:'1〜3万円',message:'デモ確認用の営業Leadです。',source:index===0?'BUSINESS_LP':index===1?'PRICING':index===2?'PARTNER_CAMPAIGN':'DIRECT',status,partnerCampaignId:index===2?partner.id:null}}));
   await prisma.businessLeadNote.create({data:{leadId:leads[1].id,adminUserId:users[0].id,note:'初回連絡済み。デモ用の内部メモです。'}});
   await prisma.businessMarketingEvent.createMany({data:[{sessionKey:'seed-session-1',eventType:'LP_VIEW',source:'x',campaign:'seed-launch'},{sessionKey:'seed-session-1',eventType:'PRICING_VIEW',source:'x',campaign:'seed-launch'},{sessionKey:'seed-session-2',leadId:leads[0].id,eventType:'CONTACT_SUBMITTED',source:'direct'}]});
   await prisma.firstTimeOffer.create({data:{name:'[SEED] 空席スポンサー初回無料',offerType:'FREE',targetProduct:'SEAT_CAMPAIGN',startsAt:shifted(-5),endsAt:shifted(60),maxUses:100,isActive:true}});
