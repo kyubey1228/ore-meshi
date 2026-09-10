@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Prisma migrations are source files (overrides a possible global migration.sql rule)
+!prisma/migrations/**/migration.sql
+
+# local hosting/deploy tool config (machine-specific, not shared)
+.lolipop/

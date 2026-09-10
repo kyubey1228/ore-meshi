@@ -60,6 +60,127 @@ enum BusinessMemberRole {
   STAFF
 }
 
+enum BusinessAccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum BusinessType {
+  RESTAURANT
+  COMPANY
+  BRAND
+  AGENCY
+  OTHER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  WON
+  LOST
+  ARCHIVED
+}
+
+enum LeadSource {
+  BUSINESS_LP
+  PRICING
+  RESOURCE_DOWNLOAD
+  PARTNER_CAMPAIGN
+  REFERRAL
+  DIRECT
+  OTHER
+}
+
+enum OfferType {
+  PERCENT
+  FIXED
+  FREE
+}
+
+enum TargetProduct {
+  SPONSORED_MEAL
+  SEAT_CAMPAIGN
+  BUSINESS_STANDARD
+  BUSINESS_PRO
+}
+
+enum ReferralStatus {
+  INVITED
+  SIGNED_UP
+  QUALIFIED
+  COMPLETED
+  INVALID
+}
+
+enum ReferralRewardStatus {
+  PENDING
+  GRANTED
+  REDEEMED
+  CANCELLED
+}
+
+enum PartnerCampaignStatus {
+  DRAFT
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum BusinessMarketingEventType {
+  LP_VIEW
+  BUSINESS_BANNER_IMPRESSION
+  BUSINESS_BANNER_CLICK
+  BUSINESS_LP_VIEW
+  SPONSORED_MEAL_SECTION_VIEW
+  SEAT_CAMPAIGN_SECTION_VIEW
+  PRICING_CTA_CLICK
+  CONTACT_CTA_CLICK
+  BUSINESS_SIGNUP_CTA_CLICK
+  PARTNER_CTA_CLICK
+  PRICING_VIEW
+  CONTACT_STARTED
+  CONTACT_SUBMITTED
+  RESOURCE_REQUESTED
+  SIGNUP_STARTED
+  SIGNUP_COMPLETED
+  CHECKOUT_STARTED
+  CHECKOUT_COMPLETED
+}
+
+enum BusinessPlan {
+  FREE
+  STANDARD
+  PRO
+}
+
+enum SubscriptionStatus {
+  INCOMPLETE
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  UNPAID
+  TRIALING
+}
+
+enum OrderType {
+  SPONSORED_MEAL
+  SEAT_CAMPAIGN
+  AREA_FEATURED
+  DIRECT_AD
+  OTHER
+}
+
+enum SponsorOrderStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
 enum BusinessCampaignStatus {
   DRAFT
   ACTIVE
@@ -125,6 +246,7 @@ model User {
   bio             String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  isAdmin         Boolean   @default(false)
 
   accounts               Account[]
   sessions               Session[]
@@ -137,6 +259,9 @@ model User {
   diningFeedbackReceived DiningFeedback[]     @relation("DiningFeedbackTo")
   diningTypes            UserDiningType[]
   businessMemberships    BusinessMember[]
+  couponRedemptions      CouponRedemption[]
+  assignedBusinessLeads  BusinessLead[]     @relation("AssignedBusinessLead")
+  businessLeadNotes      BusinessLeadNote[]
 
   @@index([twitterUsername])
 }
@@ -146,6 +271,15 @@ model BusinessAccount {
   name      String
   slug      String   @unique
   area      String?
+  legalName String?
+  businessType BusinessType @default(RESTAURANT)
+  contactName String?
+  contactEmail String?
+  websiteUrl String?
+  consultation String?
+  purposes String[] @default([])
+  planOverride BusinessPlan?
+  status    BusinessAccountStatus @default(PENDING)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -159,6 +293,202 @@ model BusinessAccount {
   socialPostSettings BusinessSocialPostSetting[]
   socialPosts        SocialPost[]
   referralEvents     ReferralEvent[]
+  billingCustomer    BillingCustomer?
+  subscription       BusinessSubscription?
+  sponsorOrders      SponsorOrder[]
+  couponRedemptions  CouponRedemption[]
+  convertedLeads     BusinessLead[]
+  referralsSent      BusinessReferral[] @relation("BusinessReferralReferrer")
+  referralReceived   BusinessReferral?  @relation("BusinessReferralReferred")
+  partnerMemberships PartnerCampaignMember[]
+  marketingEvents    BusinessMarketingEvent[]
+}
+
+model BusinessLead {
+  id                  String       @id @default(cuid())
+  companyName         String
+  contactName         String
+  email               String
+  phone               String?
+  websiteUrl          String?
+  businessType        BusinessType
+  area                String
+  purpose             String
+  monthlyBudgetRange  String?
+  desiredStartDate    DateTime?
+  message             String
+  source              LeadSource   @default(DIRECT)
+  status              LeadStatus   @default(NEW)
+  assignedAdminId     String?
+  businessAccountId   String?
+  referralCode        String?
+  partnerCampaignId   String?
+  downloadRequestedAt DateTime?
+  internalNote        String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  assignedAdmin       User?        @relation("AssignedBusinessLead", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  businessAccount     BusinessAccount? @relation(fields: [businessAccountId], references: [id], onDelete: SetNull)
+  partnerCampaign     PartnerCampaign? @relation(fields: [partnerCampaignId], references: [id], onDelete: SetNull)
+  notes               BusinessLeadNote[]
+  marketingEvents     BusinessMarketingEvent[]
+
+  @@index([status, createdAt])
+  @@index([source, createdAt])
+  @@index([email])
+  @@index([businessAccountId])
+}
+
+model BusinessLeadNote {
+  id          String       @id @default(cuid())
+  leadId      String
+  adminUserId String
+  note        String
+  createdAt   DateTime     @default(now())
+  lead        BusinessLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  adminUser   User         @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt])
+  @@index([adminUserId])
+}
+
+model FirstTimeOffer {
+  id                    String        @id @default(cuid())
+  name                  String
+  offerType             OfferType
+  discountPercent       Int?
+  discountAmount        Int?
+  targetProduct         TargetProduct
+  stripePromotionCodeId String?
+  startsAt              DateTime
+  endsAt                DateTime
+  maxUses               Int?
+  usedCount             Int           @default(0)
+  isActive              Boolean       @default(true)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([targetProduct, isActive, startsAt, endsAt])
+}
+
+model BusinessReferral {
+  id                        String                 @id @default(cuid())
+  referrerBusinessAccountId String
+  referralCode              String                 @unique
+  referredBusinessAccountId String?                @unique
+  status                    ReferralStatus         @default(INVITED)
+  rewardStatus              ReferralRewardStatus   @default(PENDING)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  referrerBusinessAccount   BusinessAccount        @relation("BusinessReferralReferrer", fields: [referrerBusinessAccountId], references: [id], onDelete: Cascade)
+  referredBusinessAccount   BusinessAccount?       @relation("BusinessReferralReferred", fields: [referredBusinessAccountId], references: [id], onDelete: SetNull)
+
+  @@index([referrerBusinessAccountId, status])
+}
+
+model PartnerCampaign {
+  id             String                    @id @default(cuid())
+  slug           String                    @unique
+  title          String
+  description    String
+  area           String
+  startsAt       DateTime
+  endsAt         DateTime
+  maxPartners    Int?
+  joinedPartners Int                       @default(0)
+  offerText      String
+  status         PartnerCampaignStatus     @default(DRAFT)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  members        PartnerCampaignMember[]
+  leads          BusinessLead[]
+
+  @@index([status, startsAt, endsAt])
+}
+
+model PartnerCampaignMember {
+  partnerCampaignId String
+  businessAccountId String
+  joinedAt          DateTime        @default(now())
+  partnerCampaign   PartnerCampaign @relation(fields: [partnerCampaignId], references: [id], onDelete: Cascade)
+  businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+
+  @@id([partnerCampaignId, businessAccountId])
+  @@index([businessAccountId])
+}
+
+model BusinessMarketingEvent {
+  id                String                     @id @default(cuid())
+  sessionKey        String
+  businessAccountId String?
+  leadId            String?
+  eventType         BusinessMarketingEventType
+  source            String?
+  medium            String?
+  campaign          String?
+  content           String?
+  createdAt         DateTime                   @default(now())
+  businessAccount   BusinessAccount?           @relation(fields: [businessAccountId], references: [id], onDelete: SetNull)
+  lead              BusinessLead?              @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt])
+  @@index([sessionKey, createdAt])
+  @@index([businessAccountId, eventType])
+  @@index([leadId])
+}
+
+model BillingCustomer {
+  id                String   @id @default(cuid())
+  businessAccountId String   @unique
+  stripeCustomerId  String   @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+}
+
+model BusinessSubscription {
+  id                   String             @id @default(cuid())
+  businessAccountId    String             @unique
+  stripeSubscriptionId String             @unique
+  stripePriceId        String
+  plan                 BusinessPlan
+  status               SubscriptionStatus
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  businessAccount      BusinessAccount    @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+
+  @@index([status, currentPeriodEnd])
+}
+
+model SponsorOrder {
+  id                      String             @id @default(cuid())
+  businessAccountId       String
+  campaignId              String
+  orderType               OrderType
+  stripeCheckoutSessionId String?            @unique
+  stripePaymentIntentId   String?            @unique
+  stripePriceId           String
+  amount                  Int?
+  currency                String?
+  status                  SponsorOrderStatus @default(DRAFT)
+  paidAt                  DateTime?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  businessAccount         BusinessAccount    @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+
+  @@index([businessAccountId, createdAt])
+  @@index([orderType, campaignId, status])
+}
+
+model StripeWebhookEvent {
+  id            String    @id @default(cuid())
+  stripeEventId String    @unique
+  eventType     String
+  processedAt   DateTime  @default(now())
+  createdAt     DateTime  @default(now())
 }
 
 model BusinessMember {
@@ -186,6 +516,7 @@ model SponsoredMeal {
   participantLimit  Int
   remainingSlots    Int
   benefit           String
+  description       String                 @default("")
   status            BusinessCampaignStatus @default(DRAFT)
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
@@ -223,6 +554,7 @@ model SeatCampaign {
   remainingSeats    Int
   endsAt            DateTime
   benefit           String
+  description       String                 @default("")
   status            BusinessCampaignStatus @default(DRAFT)
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
@@ -243,8 +575,24 @@ model Coupon {
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
   businessAccount   BusinessAccount        @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  redemptions       CouponRedemption[]
 
   @@index([businessAccountId, status, expiresAt])
+}
+
+model CouponRedemption {
+  id                String          @id @default(cuid())
+  couponId          String
+  businessAccountId String
+  userId            String
+  redeemedAt        DateTime        @default(now())
+  coupon            Coupon          @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, userId])
+  @@index([businessAccountId, redeemedAt])
+  @@index([userId, redeemedAt])
 }
 
 model DirectAdCampaign {

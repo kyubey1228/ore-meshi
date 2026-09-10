@@ -1,0 +1,1 @@
+ALTER TYPE "BusinessAccountStatus" ADD VALUE 'PENDING' BEFORE 'ACTIVE';
