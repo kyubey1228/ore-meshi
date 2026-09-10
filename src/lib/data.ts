@@ -19,6 +19,10 @@ export async function getMealList(input: unknown = {}) {
     return aDate-bDate||b.createdAt.getTime()-a.createdAt.getTime();
   });
 }
+export async function getRecentOpenMeals(limit=4){
+  if(!process.env.DATABASE_URL) return [];
+  return prisma.meal.findMany({where:{status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}]},orderBy:{createdAt:'desc'},take:limit,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
+}
 export async function getMealById(raw: string){
   const id=idSchema.safeParse(raw); if(!id.success || !process.env.DATABASE_URL)return null;
   const userId=await currentUserId();
@@ -55,9 +59,9 @@ export async function getMyPageData(){
     prisma.joinRequest.findMany({where:{userId,status:'PENDING'},orderBy:{createdAt:'desc'},include:{meal:true,candidate:true}}),
     prisma.match.findMany({where:{participants:{some:{userId}}},orderBy:{scheduledAt:'desc'},include:{meal:true,participants:{include:{user:{select:publicUser}}}}}),
     prisma.businessMember.findFirst({where:{userId,OR:[{role:{in:['OWNER','ADMIN']}},{canPostToSocial:true}]},select:{businessAccount:{select:{name:true}}}}),
-    prisma.user.findUnique({where:{id:userId},select:{isAdmin:true}})
+    prisma.user.findUnique({where:{id:userId},select:{isAdmin:true,onboardingCompletedAt:true}})
   ]);
-  return {hostedMeals,joinRequests,matches,businessMembership,isAdmin:currentUser?.isAdmin??false,completedMatches:matches.filter(m=>m.status==='COMPLETED')};
+  return {hostedMeals,joinRequests,matches,businessMembership,isAdmin:currentUser?.isAdmin??false,onboardingCompletedAt:currentUser?.onboardingCompletedAt??null,completedMatches:matches.filter(m=>m.status==='COMPLETED')};
 }
 export async function getMatchById(raw: string){
   const userId=await requirePageUser(); const id=idSchema.safeParse(raw);if(!id.success)return null;
