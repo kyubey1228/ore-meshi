@@ -1,6 +1,8 @@
 import 'server-only';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/server/admin';
+import { getAreaGenreMatrix, MIN_BUSINESS_SAMPLE_SIZE } from '@/server/business-intelligence';
+import { getAcquisitionDashboard } from '@/server/acquisition';
 
 function pctChange(current: number, previous: number): number | null {
   if (previous === 0) return null;
@@ -71,6 +73,26 @@ export async function getGrowthInsights(days: number): Promise<string[]> {
   }
   if (shareEvents === 0 && signupsCurrent > 0) insights.push('この期間、X/LINEシェアの実行数が0件でした。');
 
+  // Business視点: エリア×ジャンルのDemand/Supply Ratio、チャネル別Completed Rateの差。因果は断定せず数値のみ提示する。
+  const cells = await getAreaGenreMatrix(days);
+  const highRatio = cells
+    .filter(c => c.demandIntents + c.activeMeals >= MIN_BUSINESS_SAMPLE_SIZE && c.activeMeals > 0)
+    .map(c => ({ ...c, ratio: c.demandIntents / c.activeMeals }))
+    .sort((a, b) => b.ratio - a.ratio)[0];
+  if (highRatio && highRatio.ratio >= 3) insights.push(`${highRatio.area}の${highRatio.genre}はDemand/Supply Ratioが${highRatio.ratio.toFixed(1)}倍と高い状態です（Demand Intent${highRatio.demandIntents}件に対し募集${highRatio.activeMeals}件）。`);
+
+  const acquisition = await getAcquisitionDashboard(days);
+  const eligible = acquisition.channels.filter(c => c.signup >= 10);
+  if (eligible.length >= 2) {
+    const bySignup = [...eligible].sort((a, b) => b.signup - a.signup)[0];
+    const byCompletedRate = [...eligible].sort((a, b) => b.completedCvr - a.completedCvr)[0];
+    if (bySignup.channel !== byCompletedRate.channel) {
+      insights.push(`${bySignup.channel}経由の登録は最多（${bySignup.signup}件）ですが、Completed Rateは${percentText(bySignup.completedCvr)}で、${byCompletedRate.channel}（${percentText(byCompletedRate.completedCvr)}）より低い状態です。`);
+    }
+  }
+
   if (insights.length === 0) insights.push('この期間、大きな変化は検出されませんでした。');
   return insights;
 }
+
+function percentText(n: number) { return `${Math.round(n * 100)}%`; }
