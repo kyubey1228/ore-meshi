@@ -8,14 +8,14 @@ const BENEFIT_LABEL: Record<BenefitKind, string> = { NONE: 'なし', DRINK: 'ド
 const SEAT_OPTIONS = [1, 2, 3, 4, 5] as const;
 const MINUTES_OPTIONS = [30, 60, 120] as const;
 
-type Props = { businessAccountId: string; restaurantName: string; area: string };
+type Props = { businessAccountId: string; restaurantName: string; area: string; priceYen: string };
 
 function minutesFromNow(minutes: number) {
   const date = new Date(Date.now() + minutes * 60 * 1000);
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-export function SeatCampaignWizard({ businessAccountId, restaurantName, area }: Props) {
+export function SeatCampaignWizard({ businessAccountId, restaurantName, area, priceYen }: Props) {
   const [seats, setSeats] = useState<number | null>(null);
   const [isFivePlus, setIsFivePlus] = useState(false);
   const [endsAtTime, setEndsAtTime] = useState('');
@@ -95,7 +95,7 @@ export function SeatCampaignWizard({ businessAccountId, restaurantName, area }: 
 
       {ready && (
         <section>
-          <h3>空席スポンサー ¥1,000</h3>
+          <h3>空席スポンサー ¥{priceYen}</h3>
           <button className="btn wide" type="button" disabled={pending} onClick={submit}>{pending ? '作成しています…' : '今すぐ客を呼ぶ'}</button>
           {error && <p role="alert" className="error">{error}</p>}
           <p className="muted">下書きが作成されます。実際の支払いは次の一覧画面から行います。</p>

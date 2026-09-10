@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentBusinessMembership, getBusinessDashboard } from '@/server/business';
+import { getBusinessPricingCatalog } from '@/server/billing';
 import { BusinessCheckoutButton } from '@/components/business-checkout-button';
 import { BusinessEmptyState } from '@/components/business-empty-state';
 import { isSeatCampaignExpired } from '@/features/business/campaign-status';
@@ -22,9 +23,10 @@ export default async function SeatCampaignsList({ searchParams }: { searchParams
   if (!membership) redirect('/business/onboarding');
   const { tab: tabParam } = await searchParams;
   const tab: Tab = TABS.some(t => t.key === tabParam) ? (tabParam as Tab) : 'ACTIVE';
-  const data = await getBusinessDashboard();
+  const [data, catalog] = await Promise.all([getBusinessDashboard(), getBusinessPricingCatalog()]);
   const now = data.now;
   const drafts = data.seatCampaigns.filter(item => item.status === 'DRAFT');
+  const priceLabel = catalog ? `${catalog.seatCampaign.toLocaleString('ja-JP')}円で支払って公開する` : '支払って公開する';
 
   const items = data.seatCampaigns.filter(item => {
     const expired = isSeatCampaignExpired(item.status, item.endsAt, now);
@@ -47,7 +49,7 @@ export default async function SeatCampaignsList({ searchParams }: { searchParams
           {drafts.map(item => (
             <div className="list-card" key={item.id}>
               <strong>{item.restaurantName} · あと{item.remainingSeats}席</strong>
-              <BusinessCheckoutButton kind="SEAT_CAMPAIGN" seatCampaignId={item.id} label="1,000円で支払って公開する" />
+              <BusinessCheckoutButton kind="SEAT_CAMPAIGN" seatCampaignId={item.id} label={priceLabel} />
             </div>
           ))}
         </div>
@@ -69,7 +71,7 @@ export default async function SeatCampaignsList({ searchParams }: { searchParams
             <h2>{item.restaurantName}</h2>
             <p className="muted">あと{item.remainingSeats}席 · {timeLabel(item.endsAt)}まで</p>
             {item.benefit && <p>{item.benefit}</p>}
-            {item.status === 'DRAFT' && <BusinessCheckoutButton kind="SEAT_CAMPAIGN" seatCampaignId={item.id} label="1,000円で支払って公開する" />}
+            {item.status === 'DRAFT' && <BusinessCheckoutButton kind="SEAT_CAMPAIGN" seatCampaignId={item.id} label={priceLabel} />}
             {item.status === 'ACTIVE' && <Link className="btn secondary" href={`/business/social?kind=SEAT_CAMPAIGN&id=${item.id}`}>Xで宣伝する</Link>}
           </article>
         ))}

@@ -3,16 +3,24 @@ import { getSponsorOrderStatus } from '@/server/billing';
 
 type Query = { checkout?: string; subscription?: string; order_id?: string; kind?: string };
 
+const TARGETS = {
+  SEAT_CAMPAIGN: { label: '空席スポンサー', verb: '出ました', href: '/business/seats' },
+  AREA_FEATURED: { label: 'エリアスポンサー', verb: '掲載されました', href: '/business/area-sponsorship' },
+  SPONSORED_MEAL: { label: 'スポンサー飯', verb: '出ました', href: '/business/sponsored-meals' },
+} as const;
+
 export async function BusinessPaymentBanner({ query }: { query: Query }) {
   const order=query.checkout==='success'&&query.order_id?await getSponsorOrderStatus(query.order_id):null;
-  const kind=order?.orderType??query.kind;
-  const target=kind==='SEAT_CAMPAIGN'?{label:'空席スポンサー',href:'/business/seats'}:{label:'スポンサー飯',href:'/business/sponsored-meals'};
+  const kind=(order?.orderType??query.kind) as keyof typeof TARGETS | undefined;
+  const target=TARGETS[kind ?? 'SPONSORED_MEAL'] ?? TARGETS.SPONSORED_MEAL;
   if (query.checkout === 'success') {
     return (
       <div className="success" role="status">
-        <p>🎉 {target.label}のお支払いが完了しました。反映まで数分かかる場合があります。</p>
+        <p>🎉 {target.label}、{target.verb}。反映まで数分かかる場合があります。</p>
         <div className="row wrap">
-          <Link className="btn small" href={target.href}>{target.label}を見る</Link>
+          {kind !== 'AREA_FEATURED' && order && <Link className="btn small" href={`/business/social?kind=${kind}&id=${order.campaignId}`}>Xで客を呼ぶ</Link>}
+          <Link className="btn small secondary" href={target.href}>{target.label}を見る</Link>
+          <Link className="btn small secondary" href="/business/analytics">成果を見る</Link>
         </div>
       </div>
     );

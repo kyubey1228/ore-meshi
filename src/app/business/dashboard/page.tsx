@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { currentBusinessMembership, getBusinessDashboard, getBusinessMonthlyStats } from '@/server/business';
-import { getBusinessPlan } from '@/server/billing';
+import { currentBusinessMembership, getBusinessCompletionStats, getBusinessDashboard, getBusinessMonthlyStats } from '@/server/business';
+import { getBusinessPlan, getBusinessPricingCatalog } from '@/server/billing';
 import { BusinessPaymentBanner } from '@/components/business-payment-banner';
 import { BusinessStatusBadge } from '@/components/business-status-badge';
 import type { BusinessCampaignStatus } from '@/features/business/campaign-status';
+import { measurePerformance } from '@/lib/performance';
+
+function yenLabel(amount: number | undefined) { return amount === undefined ? '' : `¥${amount.toLocaleString('ja-JP')}`; }
 
 const PLAN_LABEL_JA = { FREE: 'フリープラン', STANDARD: 'スタンダードプラン', PRO: 'PROプラン' } as const;
 
@@ -27,11 +30,13 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
   if (membership.businessAccount.status === 'PENDING') return <section className="section narrow"><span className="eyebrow orange">APPLICATION RECEIVED</span><h1>登録を受け付けました。</h1><div className="panel"><h2>いま内容を確認しています。</h2><p>確認が終わると、スポンサー飯や空席スポンサーを作成できるようになります。</p><p className="muted">お急ぎの場合は問い合わせフォームからご連絡ください。</p><Link className="btn secondary" href="/business/contact">相談する</Link></div></section>;
   if (membership.businessAccount.status === 'SUSPENDED') return <section className="section narrow"><h1>店舗管理を一時停止しています。</h1><p className="notice">詳しくは運営へお問い合わせください。</p><Link className="btn" href="/business/contact">問い合わせる</Link></section>;
   const query = await searchParams;
-  const [data, plan, monthly] = await Promise.all([
+  const [data, plan, monthly, completion, catalog] = await measurePerformance('BUSINESS', 'dashboard aggregates', () => Promise.all([
     getBusinessDashboard(),
     getBusinessPlan(membership.businessAccountId),
     getBusinessMonthlyStats(membership.businessAccountId),
-  ]);
+    getBusinessCompletionStats(membership.businessAccountId),
+    getBusinessPricingCatalog(),
+  ]));
   const recent = recentItems(data);
 
   return (
@@ -49,7 +54,9 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
       <div className="panel">
         <h2>今月の成果</h2>
         <div className="analytics-grid">
-          <div><strong>{monthly.mealsMatched}</strong><span>飯成立</span></div>
+          <div><strong>{monthly.mealsMatched}</strong><span>Matched（人数到達）</span></div>
+          <div><strong>{monthly.mealsCompleted}</strong><span>Completed（実際に開催）</span></div>
+          <div><strong>{completion.estimatedParticipants}（推定）</strong><span>推定参加者数</span></div>
           <div><strong>{monthly.referrals}</strong><span>送客</span></div>
           <div><strong>{monthly.couponRedemptions}</strong><span>クーポン利用</span></div>
           <div><strong>{monthly.xVisits}</strong><span>X経由アクセス</span></div>
@@ -57,10 +64,12 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
       </div>
 
       <div className="business-cta-grid">
-        <Link className="panel business-cta" href="/business/sponsored-meals/new">🍚 スポンサー飯を出す<small>掲載料 ¥5,000〜</small></Link>
-        <Link className="panel business-cta" href="/business/seats/new">💺 今、席空いてます<small>¥1,000</small></Link>
+        <Link className="panel business-cta" href="/business/sponsored-meals/new">🍚 スポンサー飯を出す<small>掲載料 {catalog ? yenLabel(catalog.sponsoredMeal) : '¥5,000'}〜</small></Link>
+        <Link className="panel business-cta" href="/business/seats/new">💺 今、席空いてます<small>{catalog ? yenLabel(catalog.seatCampaign) : '¥1,000'}</small></Link>
+        <Link className="panel business-cta" href="/business/area-sponsorship/new">📍 エリアスポンサーを出す</Link>
         <Link className="panel business-cta" href="/business/social">🐦 Xで客を呼ぶ</Link>
         <Link className="panel business-cta" href="/business/coupons/new">🎟️ クーポンを作る</Link>
+        <Link className="panel business-cta" href="/business/demand">📊 Demand Intelligence</Link>
       </div>
 
       <div className="section-heading">

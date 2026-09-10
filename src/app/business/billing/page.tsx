@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { currentBusinessMembership } from '@/server/business';
-import { getBusinessBillingState } from '@/server/billing';
+import { getBusinessBillingState, getBusinessPricingCatalog } from '@/server/billing';
 import { BusinessPricingCards } from '@/components/business-pricing-cards';
 
 export const metadata = { title: '料金プラン' };
@@ -8,7 +8,9 @@ export const metadata = { title: '料金プラン' };
 export default async function BusinessBilling() {
   const membership = await currentBusinessMembership();
   if (!membership) redirect('/business/onboarding');
-  const billing = await getBusinessBillingState(membership.businessAccountId);
+  const [billing, catalog] = await Promise.all([getBusinessBillingState(membership.businessAccountId), getBusinessPricingCatalog()]);
+  const sponsoredMealYen = catalog ? catalog.sponsoredMeal.toLocaleString('ja-JP') : '5,000';
+  const seatCampaignYen = catalog ? catalog.seatCampaign.toLocaleString('ja-JP') : '1,000';
 
   return (
     <section className="section narrow">
@@ -22,7 +24,7 @@ export default async function BusinessBilling() {
       <BusinessPricingCards billing={billing} />
       <div className="panel">
         <h2>従量課金メニュー</h2>
-        <p className="muted">スポンサー飯(1件 ¥5,000)・空席スポンサー(1件 ¥1,000)は月額プランとは別料金です。キャンペーン作成時にその都度お支払いいただきます。</p>
+        <p className="muted">スポンサー飯(1件 ¥{sponsoredMealYen})・空席スポンサー(1件 ¥{seatCampaignYen})は月額プランとは別料金です。キャンペーン作成時にその都度お支払いいただきます。</p>
       </div>
     </section>
   );

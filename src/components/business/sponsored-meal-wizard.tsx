@@ -6,9 +6,9 @@ import { generateSponsoredMealPost } from '@/features/x-sharing/templates';
 
 const STEP_COUNT = 4;
 
-type Props = { businessAccountId: string; businessName: string; defaultRestaurantName: string; defaultArea: string };
+type Props = { businessAccountId: string; businessName: string; defaultRestaurantName: string; defaultArea: string; priceYen: string };
 
-export function SponsoredMealWizard({ businessAccountId, businessName, defaultRestaurantName, defaultArea }: Props) {
+export function SponsoredMealWizard({ businessAccountId, businessName, defaultRestaurantName, defaultArea, priceYen }: Props) {
   const [step, setStep] = useState(1);
   const [title, setTitle] = useState('');
   const [restaurantName, setRestaurantName] = useState(defaultRestaurantName);
@@ -86,7 +86,7 @@ export function SponsoredMealWizard({ businessAccountId, businessName, defaultRe
       {step === 3 && (
         <fieldset>
           <h3>スポンサー飯 掲載料</h3>
-          <p className="campaign-benefit">¥5,000</p>
+          <p className="campaign-benefit">¥{priceYen}</p>
           <p className="muted">含まれるもの:</p>
           <ul>
             <li>俺メシ内スポンサー表示</li>
@@ -111,7 +111,7 @@ export function SponsoredMealWizard({ businessAccountId, businessName, defaultRe
           </dl>
           <div className="row wrap">
             <button className="btn secondary" type="button" disabled={pending} onClick={() => setStep(3)}>戻る</button>
-            <button className="btn" type="button" disabled={pending} onClick={submit}>{pending ? '作成しています…' : '5,000円でスポンサー飯を出す'}</button>
+            <button className="btn" type="button" disabled={pending} onClick={submit}>{pending ? '作成しています…' : `${priceYen}円でスポンサー飯を出す`}</button>
           </div>
           {error && <p role="alert" className="error">{error}</p>}
           <p className="muted">「出す」を押すと下書きが作成されます。実際の支払いは次の一覧画面から行います。</p>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentBusinessMembership, getBusinessDashboard } from '@/server/business';
+import { getBusinessPricingCatalog } from '@/server/billing';
 import { BusinessStatusBadge } from '@/components/business-status-badge';
 import { BusinessCheckoutButton } from '@/components/business-checkout-button';
 import { BusinessEmptyState } from '@/components/business-empty-state';
@@ -13,7 +14,8 @@ export const metadata = { title: 'スポンサー飯' };
 export default async function SponsoredMealsList() {
   const membership = await currentBusinessMembership();
   if (!membership) redirect('/business/onboarding');
-  const data = await getBusinessDashboard();
+  const [data, catalog] = await Promise.all([getBusinessDashboard(), getBusinessPricingCatalog()]);
+  const priceYen = catalog ? catalog.sponsoredMeal.toLocaleString('ja-JP') : '5,000';
 
   return (
     <section className="section">
@@ -34,8 +36,8 @@ export default async function SponsoredMealsList() {
             <h2>{item.title}</h2>
             <p className="muted">{item.restaurantName} · {dateTimeLabel(item.startsAt)}</p>
             {item.benefit && <p>{item.benefit}</p>}
-            <p className="muted">掲載料 ¥5,000</p>
-            {item.status === 'DRAFT' && <BusinessCheckoutButton kind="SPONSORED_MEAL" sponsoredMealId={item.id} label="5,000円で支払って公開する" />}
+            <p className="muted">掲載料 ¥{priceYen}</p>
+            {item.status === 'DRAFT' && <BusinessCheckoutButton kind="SPONSORED_MEAL" sponsoredMealId={item.id} label={`${priceYen}円で支払って公開する`} />}
             {item.status === 'ACTIVE' && <Link className="btn secondary" href={`/business/social?kind=SPONSORED_MEAL&id=${item.id}`}>Xで宣伝する</Link>}
           </article>
         ))}
