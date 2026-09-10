@@ -8,6 +8,7 @@
 - Tailwind CSS 4 / shadcn/ui / React Hook Form / Zod / date-fns / react-day-picker
 - Auth.js (NextAuth.js v4) + Twitter/X OAuth 2.0
 - Prisma ORM 5 + Supabase PostgreSQL
+- Stripe Checkout / Subscription / Customer Portal
 
 SupabaseはDatabaseとしてのみ使用し、認証にはSupabase Authを使いません。DBアクセスはPrismaに統一しています。
 
@@ -36,9 +37,69 @@ AUTH_TWITTER_ID=
 AUTH_TWITTER_SECRET=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXTAUTH_URL=http://localhost:3000
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_SPONSORED_MEAL=
+STRIPE_PRICE_SEAT_CAMPAIGN=
+STRIPE_PRICE_BUSINESS_STANDARD=
+STRIPE_PRICE_BUSINESS_PRO=
 ```
 
 `AUTH_SECRET` は `openssl rand -base64 32` などで生成します。秘密情報はコミットしないでください。
+
+## Stripe決済
+
+Stripe Dashboardで作成済みのPrice IDとSecret Keyを環境変数へ設定します。`STRIPE_SECRET_KEY` と `STRIPE_WEBHOOK_SECRET` はサーバー専用です。`NEXT_PUBLIC_` を付けないでください。
+
+スポンサー飯と空席スポンサーは作成時に `DRAFT` となります。「支払って公開」からCheckoutを開始し、署名検証済みのWebhookが決済完了を通知した場合だけ注文を `PAID`、キャンペーンを `ACTIVE` にします。ブラウザが `success_url` へ戻っただけでは公開されません。金額と通貨はクライアントから受け取らず、環境変数のPrice IDとStripeの決済結果を使います。
+
+月額のSTANDARD / PROはStripe Checkoutのsubscription modeを使います。プラン変更・解約・支払方法の管理にはCustomer Portalを使います。PortalはStripe Dashboardで事前に有効化してください。
+
+ローカルではStripe CLIでログイン後、Webhookを転送します。
+
+```bash
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+
+表示された `whsec_...` をローカルの `STRIPE_WEBHOOK_SECRET` に設定します。別ターミナルからテストイベントを送信できます。
+
+```bash
+stripe trigger checkout.session.completed
+```
+
+実際のCheckoutフローの検証にはStripeテストモードの商品・Priceを使ってください。本番Webhook URLは `https://本番ドメイン/api/stripe/webhook` です。次のイベントをWebhook Endpointで購読します。
+
+- `checkout.session.completed`
+- `checkout.session.expired`
+- `payment_intent.payment_failed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.paid`
+- `invoice.payment_failed`
+
+Business UIから使うServer APIは次の通りです。
+
+- Mutation: `src/server/actions/billing.ts` の `createSponsoredMealCheckout`、`createSeatCampaignCheckout`、`createBusinessSubscriptionCheckout`、`createBillingPortalSession`
+- Query: `src/server/billing/index.ts` の `getBusinessBillingState`、`getBusinessSubscriptionPrices`、`getBusinessPlan`、`getBusinessCapabilities`、`getSponsorOrderStatus`
+
+Checkout系Server Actionは `{ success: true, url } | { success: false, error }` を返します。UIは成功時のURLへ遷移してください。すべての操作でログイン、店舗の稼働状態、OWNER / ADMIN権限、Campaignの所有店舗をサーバー側で確認します。
+
+`getBusinessBillingState` の `prices` はStripeから取得したSTANDARD / PROの確定金額、通貨、請求間隔を返します。Stripeが未設定または一時的に取得できない場合は空配列となるため、UIでは金額を断定せず再読み込み可能な表示にしてください。スポンサー飯・空席スポンサーのCheckout戻り先には `kind` と `order_id` が付き、`getSponsorOrderStatus` は `orderType` と `campaignId` も返します。
+
+クーポン利用申告には `src/server/actions/coupons.ts` の `redeemCoupon` を使います。同じユーザーが同じクーポンを二重利用することはできず、成功時は `COUPON_REDEEMED` のReferralEventも同じtransactionで記録します。利用者側の状態確認は `getCouponRedemptionStatus`、店舗側の件数確認は `getCouponRedemptionCount` を `src/server/queries/coupons.ts` から利用できます。
+
+## Business営業導線
+
+`/business` は飲食店・スポンサー向けの公開LP、ログイン後の管理画面は `/business/dashboard` です。料金比較・シミュレーター、登録、問い合わせ、資料請求、FAQ、紹介制度、先行パートナー募集を `/business/*` に用意しています。管理者のLead管理は `/admin/leads` です。管理者にするUserはDB上の `isAdmin` を明示的に有効化してください。
+
+Business登録は通常 `PENDING` で作成します。開発・デモで承認を省略するときだけ次を設定します。
+
+```env
+BUSINESS_AUTO_APPROVE=true
+```
+
+問い合わせと資料請求は `BusinessLead` に保存し、匿名の営業ファネルは個人情報を持たないsession keyとUTMで `BusinessMarketingEvent` に記録します。初回特典は `FirstTimeOffer.stripePromotionCodeId` にStripe Promotion Codeを設定した場合だけCheckoutへ適用されます。割引対象かどうかはBusinessAccountの過去の支払いをサーバー側で確認します。
 
 ## Supabase PostgreSQL
 
