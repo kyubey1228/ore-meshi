@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { getMyPageData } from '@/lib/data';
 import { dateTimeLabel, mealStatusLabels, matchStatusLabels, paymentLabels, requestStatusLabels } from '@/lib/format';
 import { LogoutButton } from '@/components/auth-buttons';
@@ -7,6 +8,7 @@ import { UserAvatar } from '@/components/meal-card';
 export const metadata = { title: 'マイページ' };
 export default async function MyPage() {
   const data = await getMyPageData();
+  if (!data.onboardingCompletedAt) redirect('/onboarding');
   const upcoming = data.matches.filter(m => m.status === 'ACTIVE');
   return <section className="section"><div className="section-heading"><div><span className="eyebrow orange">MY TABLE</span><h1>マイページ</h1></div><div className="row">{data.businessMembership&&<Link className="text-link" href="/business/dashboard">{data.businessMembership.businessAccount.name}の店舗管理</Link>}{data.isAdmin&&<Link className="btn secondary small" href="/admin/leads">管理者ダッシュボード</Link>}<Link className="text-link" href="/profile">プロフィール編集</Link><LogoutButton /></div></div>
     <div className="dashboard-grid">
