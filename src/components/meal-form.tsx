@@ -11,6 +11,7 @@ import { createMeal, updateMeal } from '@/server/actions/meals';
 import { mealSchema } from '@/validators';
 import { paymentLabels, candidateLabel } from '@/lib/format';
 import { MealDraftPreview } from '@/components/meal-draft-preview';
+import { AreaDatalist } from '@/components/area-datalist';
 import type { z } from 'zod';
 
 type Fields={title:string;area:string;budgetMin:number;budgetMax:number;maxParticipants:number;paymentType:'SPLIT'|'HOST_PAYS'|'GUEST_PAYS';restaurant:string;description:string;genre:string;alcohol:string;smoking:string;ageCondition:string;deadline:string;purposeIds:string[]};
@@ -18,7 +19,7 @@ type Candidate=z.infer<typeof mealSchema>['candidates'][number];
 type CreatedMeal={href:string;title:string;area:string;when:string;budget:string;payment:string;remaining:number;purposeLabels:string[]};
 const presets=[{name:'朝',start:'06:00',end:'10:00'},{name:'昼',start:'11:00',end:'14:00'},{name:'夕方',start:'15:00',end:'18:00'},{name:'夜',start:'18:00',end:'22:00'},{name:'深夜',start:'22:00',end:'02:00'}];
 
-export function MealForm({initial,id,purposes}:{initial?:Fields & {candidates:Candidate[]};id?:string;purposes:SelectableTag[]}){
+export function MealForm({initial,id,purposes,areaOptions=[]}:{initial?:Fields & {candidates:Candidate[]};id?:string;purposes:SelectableTag[];areaOptions?:string[]}){
   const {register,handleSubmit,control}=useForm<Fields>({defaultValues:initial??{title:'',area:'',budgetMin:1000,budgetMax:3000,maxParticipants:2,paymentType:'SPLIT',restaurant:'',description:'',genre:'',alcohol:'',smoking:'',ageCondition:'',deadline:'',purposeIds:[]}});
   const [date,setDate]=useState<Date>();
   const [start,setStart]=useState('18:00');
@@ -67,9 +68,10 @@ export function MealForm({initial,id,purposes}:{initial?:Fields & {candidates:Ca
       <fieldset disabled={pending}>
         <label>どんな飯にする？<input {...register('title')} required maxLength={80} placeholder="例：新宿でラーメン食いたい"/></label>
         <div className="two-col">
-          <label>どこ<input {...register('area')} required maxLength={80} placeholder="例：新宿・代々木"/></label>
+          <label>どこ<input {...register('area')} list="area-options" required maxLength={80} placeholder="例：新宿・代々木"/></label>
           <label>何人で？（自分を含む）<input {...register('maxParticipants',{valueAsNumber:true})} type="number" min={2} max={20} required/></label>
         </div>
+        <AreaDatalist options={areaOptions}/>
         <div className="field-section">
           <h2>いつ行く？</h2>
           <p className="muted">日付を選んで、時間帯を押すだけ。候補は10件まで。時刻はすべて日本時間です。</p>

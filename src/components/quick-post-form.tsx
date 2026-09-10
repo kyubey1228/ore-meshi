@@ -7,6 +7,7 @@ import { buildQuickCandidate, parseFreeTextWhen, type QuickWhen } from '@/lib/qu
 import { MEAL_TEMPLATES } from '@/lib/meal-templates';
 import { trackGrowthEvent } from '@/components/growth-tracker';
 import { MealDraftPreview } from '@/components/meal-draft-preview';
+import { AreaDatalist } from '@/components/area-datalist';
 import { candidateLabel, paymentLabels } from '@/lib/format';
 
 const WHEN_OPTIONS: { value: QuickWhen; label: string }[] = [
@@ -19,7 +20,7 @@ type RepeatDefaults = { area: string; genre: string; maxParticipants: number; de
 type FrequentPattern = { label: string; weekday: number; hour: number };
 type Tip = { prediction: { fillRate: number | null; sampleSize: number; fallbackLevel: string }; tip: string | null };
 
-export function QuickPostForm({ defaultArea = '', repeatDefaults, frequentPattern }: { defaultArea?: string; repeatDefaults?: RepeatDefaults; frequentPattern?: FrequentPattern | null }) {
+export function QuickPostForm({ defaultArea = '', repeatDefaults, frequentPattern, areaOptions = [] }: { defaultArea?: string; repeatDefaults?: RepeatDefaults; frequentPattern?: FrequentPattern | null; areaOptions?: string[] }) {
   const [area, setArea] = useState(repeatDefaults?.area ?? defaultArea);
   const [when, setWhen] = useState<QuickWhen>('tonight');
   const [freeText, setFreeText] = useState('');
@@ -121,7 +122,8 @@ export function QuickPostForm({ defaultArea = '', repeatDefaults, frequentPatter
           ))}
         </div>
       </div>
-      <label>エリア<input value={area} onChange={e => { touch(); setArea(e.target.value); }} placeholder="例：渋谷" maxLength={80} required /></label>
+      <label>エリア<input value={area} onChange={e => { touch(); setArea(e.target.value); }} list="area-options" placeholder="例：渋谷" maxLength={80} required /></label>
+      <AreaDatalist options={areaOptions}/>
       <div className="field-group">
         <strong>いつ？</strong>
         <div className="tag-selector">

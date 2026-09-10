@@ -1197,6 +1197,21 @@ model MealPurposeRelation {
   @@index([purposeId])
 }
 
+// 都道府県+主要都市の候補データ(全市区町村ではなく政令指定都市・県庁所在地・主要観光/繁華エリア等)。
+// Meal.area / SponsoredMeal.area等の自由入力欄はそのまま(丁目・商店街名などの追記も可能)で、
+// 入力補助のsuggestion一覧としてのみ使う(外部キーではない)。
+model AreaOption {
+  id         String   @id @default(cuid())
+  prefecture String
+  city       String
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@unique([prefecture, city])
+  @@index([isActive, sortOrder])
+}
+
 model MealCandidate {
   id        String   @id @default(cuid())
   mealId    String

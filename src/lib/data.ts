@@ -21,6 +21,13 @@ export const getMealPurposes = unstable_cache(
   () => prisma.mealPurpose.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{label:'asc'}],select:{id:true,slug:true,label:true}}),
   ['meal-purposes'], { revalidate: false },
 );
+// エリア入力欄(募集作成・検索・店舗側の各フォーム)の入力補助候補。市区町村名のみを返し、
+// 都道府県名でのプレフィックスは付けない(既存のarea表記「渋谷」「新宿」等との一貫性のため)。
+// 外部キーではなくsuggestion用なので、呼び出し側はここにない値も自由入力できる。
+export const getAreaOptions = unstable_cache(
+  async () => (await prisma.areaOption.findMany({where:{isActive:true},orderBy:[{sortOrder:'asc'},{city:'asc'}],select:{city:true}})).map(a=>a.city),
+  ['area-options'], { revalidate: false },
+);
 export async function getNotifications(limit=30){
   const userId=await requirePageUser();
   return prisma.notification.findMany({where:{userId},orderBy:{createdAt:'desc'},take:limit});
@@ -157,6 +164,14 @@ const cachedActiveSeatCampaigns = unstable_cache(
 export async function getActiveSeatCampaigns(area?: string){
   if(!process.env.DATABASE_URL) return [];
   return cachedActiveSeatCampaigns(area??'');
+}
+const cachedActiveCoupons = unstable_cache(
+  (area: string) => prisma.coupon.findMany({where:{status:'ACTIVE',expiresAt:{gt:new Date()},...(area?{area:{contains:area,mode:'insensitive'}}:{})},orderBy:{expiresAt:'asc'},take:24,select:{id:true,title:true,restaurantName:true,area:true,benefit:true,expiresAt:true}}),
+  ['active-coupons'], { revalidate: 30 },
+);
+export async function getActiveCoupons(area?: string){
+  if(!process.env.DATABASE_URL) return [];
+  return cachedActiveCoupons(area??'');
 }
 export async function getUserProfileData(raw: string){
   const parsed=idSchema.safeParse(raw);if(!parsed.success || !process.env.DATABASE_URL)return null;
