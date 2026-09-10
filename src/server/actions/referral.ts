@@ -23,6 +23,7 @@ export async function recordReferralClick(input: unknown): Promise<{ ok: boolean
     await prisma.referral.create({ data: { referralCode: data.referralCode, referrerUserId: referrer.id, mealId: data.mealId, source: data.source } });
     jar.set(REFERRAL_COOKIE, data.referralCode, cookieOptions);
     await recordGrowthEvent('REFERRAL_LINK_OPENED', { recruitmentId: data.mealId, source: data.source });
+    await recordGrowthEvent('INVITE_LINK_OPENED', { recruitmentId: data.mealId, source: data.source });
     return { ok: true };
   } catch {
     return { ok: false };

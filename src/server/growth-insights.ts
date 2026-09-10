@@ -99,16 +99,21 @@ export async function getGrowthInsights(days: number): Promise<GrowthInsight[]> 
   }
 
   // シェア経由の登録率とActivated Rate(簡易版): GrowthEventのソース別に大まかな傾向のみ。
-  const [shareEvents, referralOpens, referralSignups] = await Promise.all([
+  const [shareEvents, referralOpens, referralSignups, verifiedInvites, referralActivated, activatedUsers] = await Promise.all([
     prisma.growthEvent.count({ where: { eventType: { in: ['RECRUITMENT_SHARE_X', 'RECRUITMENT_SHARE_LINE'] }, createdAt: { gte: since } } }),
     prisma.growthEvent.count({ where: { eventType: 'REFERRAL_LINK_OPENED', createdAt: { gte: since } } }),
     prisma.growthEvent.count({ where: { eventType: 'REFERRAL_SIGNUP_COMPLETED', createdAt: { gte: since } } }),
+    prisma.growthEvent.count({ where: { eventType: 'INVITE_SHARE_COMPLETED', createdAt: { gte: since } } }),
+    prisma.growthEvent.count({ where: { eventType: 'REFERRAL_ACTIVATION_COMPLETED', createdAt: { gte: since } } }),
+    prisma.user.count({ where: { onboardingCompletedAt: { gte: since } } }),
   ]);
   if (referralOpens >= 10) {
     const rate = referralSignups / referralOpens;
     if (rate < 0.05) insights.push(insight(`招待URLの開封数(${referralOpens})に対して登録完了(${referralSignups})が少なく、紹介経由の転換率が低い状態です。`, 'REFERRAL_ACTIVATION'));
   }
   if (shareEvents === 0 && signupsCurrent > 0) insights.push(insight('この期間、X/LINEシェアの実行数が0件でした。', 'REFERRAL_ACTIVATION'));
+  const kFactor = activatedUsers && verifiedInvites ? (verifiedInvites / activatedUsers) * (referralActivated / verifiedInvites) : 0;
+  if (verifiedInvites >= 10 && kFactor < 0.2) insights.push(insight(`確認済み招待${verifiedInvites}件に対するK-factorが${kFactor.toFixed(2)}です。招待CTAの実験候補です。`, 'REFERRAL_ACTIVATION'));
 
   // Business視点: エリア×ジャンルのDemand/Supply Ratio、チャネル別Completed Rateの差。因果は断定せず数値のみ提示する。
   const cells = await getAreaGenreMatrix(days);

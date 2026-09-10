@@ -325,6 +325,8 @@ model BusinessAccount {
   partnerMemberships PartnerCampaignMember[]
   marketingEvents    BusinessMarketingEvent[]
   areaSponsorships   AreaSponsorship[]
+  notificationPreference BusinessNotificationPreference?
+  notificationLogs       BusinessNotificationLog[]
 }
 
 model BusinessLead {
@@ -426,12 +428,18 @@ enum SocialContentChannel {
 // サービス全体・匿名集計値ベースのGrowthコンテンツ案は別モデルとして持つ。
 // 自動投稿APIとは連携せず、コピーして手動投稿する運用を前提とする(DRAFT→APPROVED→POSTEDは手動遷移)。
 model SocialContentDraft {
-  id        String               @id @default(cuid())
-  channel   SocialContentChannel
-  body      String
-  status    SocialContentStatus  @default(DRAFT)
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
+  id          String               @id @default(cuid())
+  channel     SocialContentChannel
+  body        String
+  status      SocialContentStatus  @default(DRAFT)
+  template    String?
+  dataSource  Json?
+  imageFormat String?
+  generatedAt DateTime?
+  postedAt    DateTime?
+  utmCampaign String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   @@index([status, createdAt])
 }
@@ -594,6 +602,20 @@ enum GrowthEventType {
   GROWTH_RECOMMENDATION_ACTIONED
   CONTENT_DRAFT_CREATED
   CONTENT_DRAFT_POSTED
+  INVITE_SHARE_CLICKED
+  INVITE_SHARE_COMPLETED
+  INVITE_LINK_COPIED
+  INVITE_QR_DISPLAYED
+  INVITE_LINK_OPENED
+  EMPTY_STATE_VIEWED
+  EMPTY_STATE_CTA_CLICKED
+  SEO_LANDING_VIEWED
+  CONTENT_IMAGE_GENERATED
+  CONTENT_IMAGE_DOWNLOADED
+  BUSINESS_NOTIFICATION_SENT
+  BUSINESS_NOTIFICATION_OPENED
+  BUSINESS_NOTIFICATION_CLICKED
+  BUSINESS_LIFECYCLE_TRIGGERED
 }
 
 model GrowthEvent {
@@ -689,12 +711,19 @@ enum NotificationType {
   MEAL_COMPLETION_CHECK
   MEAL_AUTO_CLOSED
   WIN_BACK_FIRST_ACTION
+  BUSINESS_ACTIVATION_REMINDER
+  BUSINESS_CAMPAIGN_NO_VIEWS
+  BUSINESS_CAMPAIGN_NO_ACTIONS
+  BUSINESS_FIRST_RESULT
+  BUSINESS_SUBSCRIPTION_ENDING
+  BUSINESS_CAMPAIGN_SUMMARY
 }
 
 enum NotificationCategory {
   RECRUITMENT
   PARTICIPATION
   RECOMMENDATION
+  BUSINESS
 }
 
 model Notification {
@@ -777,6 +806,16 @@ model DailyMetrics {
   notificationsSent        Int      @default(0)
   notificationsOpened      Int      @default(0)
   notificationsClicked     Int      @default(0)
+  invitesSent              Int      @default(0)
+  uniqueInviters           Int      @default(0)
+  inviteClicks             Int      @default(0)
+  inviteSignups            Int      @default(0)
+  inviteActivated          Int      @default(0)
+  activatedUsers           Int      @default(0)
+  businessSignups          Int      @default(0)
+  businessActivated        Int      @default(0)
+  sponsorPurchases         Int      @default(0)
+  revenue                  Int      @default(0)
   notificationTypeMetrics  Json     @default("{}")
   generatedAt              DateTime
   createdAt                DateTime @default(now())
@@ -784,6 +823,49 @@ model DailyMetrics {
 
   @@unique([date, timezone])
   @@index([date])
+}
+
+enum DailyMetricJobStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model DailyMetricJobRun {
+  id            String               @id @default(cuid())
+  targetDate    DateTime             @db.Date
+  timezone      String               @default("Asia/Tokyo")
+  startedAt     DateTime             @default(now())
+  finishedAt    DateTime?
+  rowsProcessed Int                  @default(0)
+  status        DailyMetricJobStatus @default(RUNNING)
+  errorMessage  String?
+
+  @@index([targetDate, startedAt])
+  @@index([status, startedAt])
+}
+
+model BusinessNotificationPreference {
+  businessAccountId       String   @id
+  activityEnabled         Boolean  @default(true)
+  campaignPerformanceEnabled Boolean @default(true)
+  billingEnabled          Boolean  @default(true)
+  growthTipsEnabled       Boolean  @default(true)
+  updatedAt               DateTime @updatedAt
+  businessAccount         BusinessAccount @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+}
+
+model BusinessNotificationLog {
+  id                String   @id @default(cuid())
+  businessAccountId String
+  notificationType  NotificationType
+  triggerKey        String   @unique
+  recipientCount    Int      @default(0)
+  createdAt         DateTime @default(now())
+  businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+
+  @@index([businessAccountId, createdAt])
+  @@index([notificationType, createdAt])
 }
 
 model AreaDemandStats {

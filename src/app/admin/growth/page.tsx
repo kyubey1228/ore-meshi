@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getGrowthDashboard } from '@/server/growth-admin';
+import { getGrowthDashboard, getGrowthHealth } from '@/server/growth-admin';
 import { getCompletionStats, getDemandDashboard, getNotificationAnalysis, getPhase3Overview, getRepeatStats, getSupplyDemandGap, getTimeToMatchStats } from '@/server/phase3-admin';
 import { getGrowthInsights } from '@/server/growth-insights';
 import { recordGrowthRecommendationAction } from '@/server/actions/growth-recommendations';
@@ -19,7 +19,7 @@ function days(n: number | null) { return n === null ? 'データ不足' : `${n.t
 export default async function GrowthDashboard({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const { days: rawDays } = await searchParams;
   const days_ = PERIODS.includes(Number(rawDays)) ? Number(rawDays) : 30;
-  const [data, overview, completion, timeToMatch, repeat, notificationAnalysis, demand, supplyGap, insights, experimentResults] = await measurePerformance('ADMIN', 'growth dashboard aggregates', () => Promise.all([
+  const [data, overview, completion, timeToMatch, repeat, notificationAnalysis, demand, supplyGap, insights, experimentResults, health] = await measurePerformance('ADMIN', 'growth dashboard aggregates', () => Promise.all([
     getGrowthDashboard(days_),
     getPhase3Overview(days_),
     getCompletionStats(days_),
@@ -30,6 +30,7 @@ export default async function GrowthDashboard({ searchParams }: { searchParams: 
     getSupplyDemandGap(),
     getGrowthInsights(days_),
     getExperimentResults('join_cta', days_),
+    getGrowthHealth(),
   ]));
   const maxAreaCount = Math.max(1, ...data.topCompletedAreas.map(a => a.count));
   const timeToMatchChange = timeToMatch.medianTimeToMatchHours !== null && timeToMatch.previousMedianTimeToMatchHours
@@ -62,6 +63,12 @@ export default async function GrowthDashboard({ searchParams }: { searchParams: 
       </div>
 
       <div className="panel">
+        <h2>Growth Health</h2>
+        {health.stale&&<p className="error">DailyMetricsが{health.ageHours===null?'まだ生成されていません':`${Math.round(health.ageHours)}時間更新されていません`}。</p>}
+        <div className="analytics-grid"><div><strong>{health.metric?health.metric.date.toISOString().slice(0,10):'未生成'}</strong><span>DailyMetrics最終日</span></div><div><strong>{health.job?.status??'未実行'}</strong><span>Cron health</span></div><div><strong>{data.kFactor.kFactor.toFixed(2)}</strong><span>K-factor</span></div><div><strong>{percent(health.businessActivationRate)}</strong><span>Business activation</span></div><div><strong>{health.seoIndexablePages}</strong><span>SEO index候補</span></div><div><strong>{health.contentDrafts}</strong><span>Content drafts</span></div></div>
+      </div>
+
+      <div className="panel">
         <h2>最重要指標（North Star）</h2>
         <p className="muted">「実際に誰かと飯を食べるところまで到達するユーザーを増やす」ことを最優先の指標とします。登録数やMatched（人数到達）だけでは成功とみなしません。</p>
         <div className="analytics-grid">
@@ -70,6 +77,20 @@ export default async function GrowthDashboard({ searchParams }: { searchParams: 
           <div><strong>{percent(overview.recruitmentFillRate)}</strong><span>募集成立率（Matched / 募集数）</span></div>
           <div><strong>{percent(completion.matchToCompletedRate)}</strong><span>Matched → Completed 到達率</span></div>
         </div>
+      </div>
+
+      <div className="panel">
+        <h2>招待ループ（K-factor）</h2>
+        <p className="muted">K-factorは「Activated Userあたりの確認済み招待数 × 招待からActivationへの転換率」です。URLコピーや共有画面を開いただけの操作は送信数に含めません。</p>
+        <div className="analytics-grid">
+          <div><strong>{data.kFactor.kFactor.toFixed(2)}{data.kFactor.sampleIsSmall ? '（参考値）' : ''}</strong><span>K-factor</span></div>
+          <div><strong>{data.kFactor.invitesPerActivatedUser.toFixed(2)}</strong><span>Invites / Activated User</span></div>
+          <div><strong>{percent(data.kFactor.inviteClickRate)}</strong><span>Invite → Click</span></div>
+          <div><strong>{percent(data.kFactor.inviteSignupRate)}</strong><span>Click → Signup</span></div>
+          <div><strong>{percent(data.kFactor.inviteActivationRate)}</strong><span>Invite → Activation</span></div>
+          <div><strong>{percent(data.referralContribution)}</strong><span>Referral contribution</span></div>
+        </div>
+        <p className="muted">確認済み招待 {data.kFactor.invitesSent}件・招待者 {data.kFactor.uniqueInviters}人・招待経由Activation {data.kFactor.inviteActivated}人・期間内Activated User {data.kFactor.activatedUsers}人。</p>
       </div>
 
       <div className="panel">

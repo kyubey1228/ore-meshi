@@ -15,6 +15,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "analytics:verify": "node --env-file=.env.local --import tsx scripts/verify-snapshot-parity.ts",
+    "analytics:backfill": "node --env-file=.env.local --import tsx scripts/backfill-daily-metrics.ts",
     "test:accounts": "node --env-file=.env.local --import tsx scripts/create-test-accounts.ts",
     "db:migrate": "node --env-file=.env.local node_modules/prisma/build/index.js migrate dev",
     "db:deploy": "node --env-file=.env.local node_modules/prisma/build/index.js migrate deploy"

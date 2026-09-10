@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { GROWTH_EVENT_TYPES } from '@/lib/growth-events';
+import { currentUserId } from '@/server/auth';
 
 const schema = z.object({
   eventType: z.enum(GROWTH_EVENT_TYPES),
@@ -28,11 +29,11 @@ const schema = z.object({
 
 const batchSchema = z.object({ events: z.array(schema).min(1).max(30) });
 
-function toRow(sessionKey: string, parsed: z.infer<typeof schema>) {
+function toRow(sessionKey: string, userId: string | null, parsed: z.infer<typeof schema>) {
   const { rankingPosition, recommendationReason, personalizationEnabled, experimentName, variant, notificationType, channel, utmContent, utmTerm, ...data } = parsed;
   const metadataEntries = { rankingPosition, recommendationReason, personalizationEnabled, experimentName, variant, notificationType, channel, utmContent, utmTerm };
   const hasMetadata = Object.values(metadataEntries).some(v => v !== undefined);
-  return { sessionKey, ...data, metadata: hasMetadata ? metadataEntries : undefined };
+  return { sessionKey, userId, ...data, metadata: hasMetadata ? metadataEntries : undefined };
 }
 
 // 複数件のイベント(例: 一覧表示時のimpression計測)を1リクエスト・1 DB書き込みにまとめて送るための形。
@@ -43,13 +44,14 @@ export async function POST(request: Request) {
     const cookie = request.headers.get('cookie') ?? '';
     const existing = cookie.match(/(?:^|; )ore_growth_session=([^;]+)/)?.[1];
     const sessionKey = existing ? decodeURIComponent(existing) : randomUUID();
+    const userId = await currentUserId();
 
     if (Array.isArray(body?.events)) {
       const { events } = batchSchema.parse(body);
-      await prisma.growthEvent.createMany({ data: events.map(e => toRow(sessionKey, e)) });
+      await prisma.growthEvent.createMany({ data: events.map(e => toRow(sessionKey, userId, e)) });
     } else {
       const parsed = schema.parse(body);
-      await prisma.growthEvent.create({ data: toRow(sessionKey, parsed) });
+      await prisma.growthEvent.create({ data: toRow(sessionKey, userId, parsed) });
     }
 
     const response = NextResponse.json({ ok: true });
