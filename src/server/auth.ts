@@ -98,3 +98,9 @@ export async function requirePageUser() {
   if (!id) redirect('/login');
   return id;
 }
+
+export async function requireBusinessPageUser(next?: string) {
+  const id = await currentUserId();
+  if (!id) redirect(next ? `/business/login?next=${encodeURIComponent(next)}` : '/business/login');
+  return id;
+}
