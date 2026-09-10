@@ -25,3 +25,6 @@ async function computeAdminCampaigns(){
   ].sort((a,b)=>b.createdAt.getTime()-a.createdAt.getTime());
 }
 export async function getAdminCampaigns(){await requireAdmin();return unstable_cache(computeAdminCampaigns,['admin-campaigns'],{revalidate:30})();}
+const computeAdminPartnerCampaigns=()=>prisma.partnerCampaign.findMany({orderBy:{createdAt:'desc'},take:100,select:{id:true,slug:true,title:true,description:true,area:true,offerText:true,startsAt:true,endsAt:true,maxPartners:true,joinedPartners:true,status:true,createdAt:true,_count:{select:{members:true,leads:true}}}});
+// 公開LP(/business, /business/partner)にACTIVE状態のまま出続けるため、DRAFT/ENDED/CANCELLEDも含め全件をadminで見られるようにする。
+export async function getAdminPartnerCampaigns(){await requireAdmin();return unstable_cache(computeAdminPartnerCampaigns,['admin-partner-campaigns'],{revalidate:30})();}
