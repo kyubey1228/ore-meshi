@@ -27,6 +27,7 @@ export async function markNotificationClicked(input: unknown) {
     if (Object.keys(data).length) await prisma.notification.update({ where: { id }, data });
     await recordGrowthEvent('NOTIFICATION_CLICKED', { recruitmentId: notification.mealId ?? undefined, loggedIn: true, notificationType: notification.type });
     await recordGrowthEvent('NOTIFICATION_CONVERSION', { recruitmentId: notification.mealId ?? undefined, loggedIn: true, notificationType: notification.type });
+    if (notification.type === 'DEMAND_MATCH_FOUND') await recordGrowthEvent('DEMAND_MATCH_NOTIFICATION_CLICKED', { recruitmentId: notification.mealId ?? undefined, loggedIn: true });
     return notification.mealId ? `/meals/${notification.mealId}` : '/notifications';
   });
 }
@@ -37,7 +38,7 @@ export async function markAllNotificationsRead() {
   });
 }
 
-const preferenceSchema = z.object({ recruitmentEnabled: z.coerce.boolean(), participationEnabled: z.coerce.boolean(), recommendationEnabled: z.coerce.boolean() });
+const preferenceSchema = z.object({ recruitmentEnabled: z.coerce.boolean(), participationEnabled: z.coerce.boolean(), recommendationEnabled: z.coerce.boolean(), emailTransactionalEnabled: z.coerce.boolean(), emailMarketingEnabled: z.coerce.boolean() });
 
 export async function updateNotificationPreference(input: unknown) {
   return perform(async userId => {

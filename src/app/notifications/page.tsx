@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requirePageUser } from '@/server/auth';
 import { getNotificationPreference, getNotifications } from '@/lib/data';
+import { prisma } from '@/lib/prisma';
 import { NotificationRow } from '@/components/notification-row';
 import { NotificationPreferenceForm } from '@/components/notification-preference-form';
 import { ActionForm } from '@/components/action-form';
@@ -10,7 +11,7 @@ export const metadata = { title: '通知' };
 
 export default async function NotificationsPage() {
   const userId = await requirePageUser('/notifications');
-  const [notifications, preference] = await Promise.all([getNotifications(), getNotificationPreference(userId)]);
+  const [notifications, preference, user] = await Promise.all([getNotifications(), getNotificationPreference(userId), prisma.user.findUnique({ where: { id: userId }, select: { email: true } })]);
   const unreadCount = notifications.filter(n => !n.readAt).length;
 
   return (
@@ -24,7 +25,8 @@ export default async function NotificationsPage() {
       ) : (
         <div className="panel">{notifications.map(n => <NotificationRow key={n.id} notification={n} />)}</div>
       )}
-      <NotificationPreferenceForm preference={preference} />
+      <NotificationPreferenceForm preference={preference} hasEmail={Boolean(user?.email)} />
+      <Link className="text-link" href="/profile">プロフィールでメールアドレスを設定 →</Link>
       <Link className="text-link" href="/mypage">← マイページへ</Link>
     </section>
   );

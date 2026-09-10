@@ -18,7 +18,7 @@ export async function getUnreadNotificationCount(){
 }
 export async function getNotificationPreference(userId:string){
   const pref=await prisma.notificationPreference.findUnique({where:{userId}});
-  return pref??{recruitmentEnabled:true,participationEnabled:true,recommendationEnabled:true};
+  return pref??{recruitmentEnabled:true,participationEnabled:true,recommendationEnabled:true,emailTransactionalEnabled:true,emailMarketingEnabled:false};
 }
 function whenWhere(when: string | undefined): Prisma.MealWhereInput {
   if (!when) return {};
