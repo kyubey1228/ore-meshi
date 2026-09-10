@@ -12,6 +12,7 @@ export async function markNotificationRead(input: unknown) {
     if (!notification.readAt) {
       await prisma.notification.update({ where: { id }, data: { readAt: new Date() } });
       await recordGrowthEvent('NOTIFICATION_OPENED', { recruitmentId: notification.mealId ?? undefined, loggedIn: true, notificationType: notification.type });
+      if (notification.type.startsWith('BUSINESS_')) await recordGrowthEvent('BUSINESS_NOTIFICATION_OPENED', { loggedIn: true, notificationType: notification.type });
     }
   });
 }
@@ -26,6 +27,7 @@ export async function markNotificationClicked(input: unknown) {
     if (!notification.clickedAt) data.clickedAt = new Date();
     if (Object.keys(data).length) await prisma.notification.update({ where: { id }, data });
     await recordGrowthEvent('NOTIFICATION_CLICKED', { recruitmentId: notification.mealId ?? undefined, loggedIn: true, notificationType: notification.type });
+    if (notification.type.startsWith('BUSINESS_')) await recordGrowthEvent('BUSINESS_NOTIFICATION_CLICKED', { loggedIn: true, notificationType: notification.type });
     await recordGrowthEvent('NOTIFICATION_CONVERSION', { recruitmentId: notification.mealId ?? undefined, loggedIn: true, notificationType: notification.type });
     if (notification.type === 'DEMAND_MATCH_FOUND') await recordGrowthEvent('DEMAND_MATCH_NOTIFICATION_CLICKED', { recruitmentId: notification.mealId ?? undefined, loggedIn: true });
     return notification.mealId ? `/meals/${notification.mealId}` : '/notifications';

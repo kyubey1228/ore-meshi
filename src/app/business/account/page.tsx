@@ -5,6 +5,8 @@ import { getBusinessBillingState } from '@/server/billing';
 import { getCurrentUser } from '@/lib/data';
 import { UserAvatar } from '@/components/meal-card';
 import { LogoutButton } from '@/components/auth-buttons';
+import { prisma } from '@/lib/prisma';
+import { BusinessNotificationPreferenceForm } from '@/components/business-notification-preference-form';
 
 const PLAN_LABEL_JA = { FREE: 'フリープラン', STANDARD: 'スタンダードプラン', PRO: 'PROプラン' } as const;
 const ROLE_LABEL_JA = { OWNER: 'オーナー', ADMIN: '管理者', STAFF: 'スタッフ' } as const;
@@ -15,12 +17,13 @@ export const metadata = { title: 'アカウント設定 | 店舗・企業向け'
 export default async function BusinessAccountPage() {
   const membership = await currentBusinessMembership();
   if (!membership) redirect('/business/onboarding');
-  const [user, billing, team] = await Promise.all([
+  const [user, billing, team, notificationPreference] = await Promise.all([
     getCurrentUser(),
     // STAFF権限やPENDING/SUSPENDED状態ではgetBusinessBillingState()がensure()で弾くため、
     // アカウント設定ページ自体(ログアウト等)は使えるようプラン取得の失敗だけは許容する。
     getBusinessBillingState(membership.businessAccountId).catch(() => null),
     getBusinessTeam(membership.businessAccountId),
+    prisma.businessNotificationPreference.findUnique({ where: { businessAccountId: membership.businessAccountId } }),
   ]);
   if (!user) redirect('/login?next=%2Fbusiness%2Faccount');
 
@@ -32,6 +35,8 @@ export default async function BusinessAccountPage() {
           <h1>アカウント設定</h1>
         </div>
       </div>
+
+      <BusinessNotificationPreferenceForm businessAccountId={membership.businessAccountId} initial={notificationPreference ?? { activityEnabled: true, campaignPerformanceEnabled: true, billingEnabled: true, growthTipsEnabled: true }} />
 
       <div className="panel">
         <h2>ログイン中のXアカウント</h2>

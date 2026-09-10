@@ -13,6 +13,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   await prisma.notification.update({ where: { id }, data: { clickedAt: notification.clickedAt ?? now, emailClickedAt: notification.emailClickedAt ?? now } });
   await recordGrowthEvent('EMAIL_LINK_CLICKED', { recruitmentId: notification.mealId ?? undefined, loggedIn: true, notificationType: notification.type });
   await recordGrowthEvent('NOTIFICATION_CLICKED', { recruitmentId: notification.mealId ?? undefined, loggedIn: true, notificationType: notification.type, channel: 'EMAIL' });
+  if (notification.type.startsWith('BUSINESS_')) await recordGrowthEvent('BUSINESS_NOTIFICATION_CLICKED', { loggedIn: true, notificationType: notification.type, channel: 'EMAIL' });
   if (!notification.clickedAt) await recordGrowthEvent('EMAIL_CONVERSION', { recruitmentId: notification.mealId ?? undefined, loggedIn: true, notificationType: notification.type });
   const target = notification.mealId ? `${appUrl()}/meals/${notification.mealId}` : `${appUrl()}/notifications`;
   return NextResponse.redirect(target);

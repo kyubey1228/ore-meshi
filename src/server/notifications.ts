@@ -19,6 +19,12 @@ const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
   MEAL_COMPLETION_CHECK: 'PARTICIPATION',
   MEAL_AUTO_CLOSED: 'RECRUITMENT',
   WIN_BACK_FIRST_ACTION: 'RECOMMENDATION',
+  BUSINESS_ACTIVATION_REMINDER: 'BUSINESS',
+  BUSINESS_CAMPAIGN_NO_VIEWS: 'BUSINESS',
+  BUSINESS_CAMPAIGN_NO_ACTIONS: 'BUSINESS',
+  BUSINESS_FIRST_RESULT: 'BUSINESS',
+  BUSINESS_SUBSCRIPTION_ENDING: 'BUSINESS',
+  BUSINESS_CAMPAIGN_SUMMARY: 'BUSINESS',
 };
 
 // 最初にメール化する通知は絞る(全通知を最初からメール化しない)。ここに無い種類はin-appのみ。
@@ -48,7 +54,7 @@ async function createNotificationInternal(params: CreateNotificationInput) {
       prisma.user.findUnique({ where: { id: params.userId }, select: { email: true } }),
     ]);
     const enabled = preference
-      ? (category === 'RECRUITMENT' ? preference.recruitmentEnabled : category === 'PARTICIPATION' ? preference.participationEnabled : preference.recommendationEnabled)
+      ? (category === 'RECRUITMENT' ? preference.recruitmentEnabled : category === 'PARTICIPATION' ? preference.participationEnabled : category === 'RECOMMENDATION' ? preference.recommendationEnabled : true)
       : true;
     if (!enabled) return null;
     const notification = await prisma.notification.create({
