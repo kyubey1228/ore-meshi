@@ -1,3 +1,6 @@
+import { effectivePlanFromAccount } from './business-capabilities';
+import type { BusinessPlan, SubscriptionStatus } from '@prisma/client';
+
 export type RankableMeal = {
   id: string;
   area: string;
@@ -7,6 +10,7 @@ export type RankableMeal = {
   host: { createdAt: Date; bio: string | null; image: string | null; diningTypes: unknown[] };
   candidates: { date: Date }[];
   _count: { joinRequests: number };
+  sponsoredMeals?: { businessAccount: { planOverride: BusinessPlan | null; subscription: { plan: BusinessPlan; status: SubscriptionStatus; currentPeriodEnd: Date } | null } }[];
 };
 
 export type RankingContext = {
@@ -50,7 +54,21 @@ export function scoreMeal<T extends RankableMeal>(meal: T, context: RankingConte
     (context.recommendationProfile?.areas.some(a => a.toLowerCase() === meal.area.toLowerCase()) ? 5 : 0) +
     (meal.genre && context.recommendationProfile?.genres.some(g => g.toLowerCase() === meal.genre?.toLowerCase()) ? 5 : 0);
 
-  const score = areaMatch + genreMatch + participantCount + lastSlotBonus + upcomingBonus + hostTrustBonus + recencyBonus + feedbackBonus;
+  // スポンサーBoost: 「PROだから常に1位」にならないよう、既存の関連性シグナル(エリア一致/ジャンル一致/残り1人)が
+  // 実際に成立している場合のみ加点する(説明可能・状態に応じて自然に増減するため専用のcooldown機構は設けていない)。
+  const sponsorship = meal.sponsoredMeals?.[0]?.businessAccount;
+  const sponsorPlan = sponsorship ? effectivePlanFromAccount(sponsorship.planOverride, sponsorship.subscription) : null;
+  let sponsorBonus = 0;
+  if (sponsorPlan) {
+    sponsorBonus += 15; // 基本のスポンサー露出加点(控えめ、他の関連性ボーナスより小さい)
+    if (sponsorPlan === 'STANDARD' || sponsorPlan === 'PRO') {
+      sponsorBonus += areaMatch > 0 ? 10 : 0; // Area Boost: 実際にエリアが一致する場合のみ
+      sponsorBonus += genreMatch > 0 ? 8 : 0; // Purpose/Genre Boost: 実際にジャンルが一致する場合のみ
+    }
+    if (sponsorPlan === 'PRO' && remaining === 1) sponsorBonus += 25; // Last Seat Boost: 本当にあと1人の場合のみ
+  }
+
+  const score = areaMatch + genreMatch + participantCount + lastSlotBonus + upcomingBonus + hostTrustBonus + recencyBonus + feedbackBonus + sponsorBonus;
 
   const reason: RankedMeal['reason'] =
     lastSlotBonus >= 50 ? 'LAST_SLOT'

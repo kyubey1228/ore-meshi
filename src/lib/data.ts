@@ -56,7 +56,9 @@ function withinHours(meal: { candidates: { date: Date; startTime: string }[] }, 
 type MealListFilters = Partial<z.infer<typeof filterSchema>>;
 async function fetchOpenMeals(filters: MealListFilters, limit: number) {
   const where: Prisma.MealWhereInput={status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}],...(filters.area?{area:{contains:filters.area,mode:'insensitive'}}:{}),...(filters.paymentType?{paymentType:filters.paymentType}:{}),...(typeof filters.budget==='number'?{budgetMax:{lte:filters.budget}}:{}),...(filters.date?{candidates:{some:{date:new Date(filters.date)}}}:{}),...(filters.purpose?{purposes:{some:{purpose:{slug:filters.purpose,isActive:true}}}}:{}),...whenWhere(filters.when)};
-  return prisma.meal.findMany({where,orderBy:{createdAt:'desc'},take:limit,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
+  // sponsoredMeals.businessAccountのネスト取得はMealごとに個別queryを発行せず1回のfindManyにバッチされる
+  // (Prismaのrelation loadingで、行ごとのN+1にはならない)。Boostランキングにプラン情報が必要なため取得する。
+  return prisma.meal.findMany({where,orderBy:{createdAt:'desc'},take:limit,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true,businessAccount:{select:{planOverride:true,subscription:{select:{plan:true,status:true,currentPeriodEnd:true}}}}}}}});
 }
 // DB接続経路のレイテンシが大きいため(1往復で数百ms〜規模)、一覧の取得自体を短時間キャッシュし、
 // 誰が見ても同じ結果になるDB取得部分と、閲覧者ごとに変わる並び替え(rankMeals)を分離する。
