@@ -10,6 +10,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: base, changeFrequency: 'daily', priority: 1 },
     { url: `${base}/meals`, changeFrequency: 'hourly', priority: 0.9 },
+    { url: `${base}/business/start`, changeFrequency: 'monthly', priority: 0.8 },
   ];
 
   if (!process.env.DATABASE_URL) return staticRoutes;
