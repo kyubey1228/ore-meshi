@@ -9,7 +9,11 @@ export class UserError extends Error {}
 export function ensure(condition: unknown, message = 'この操作を行う権限がありません。'): asserts condition { if (!condition) throw new UserError(message); }
 export async function transaction<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
   for (let attempt=0; ;attempt++) {
-    try { return await prisma.$transaction(fn, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }); }
+    try { return await prisma.$transaction(fn, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 10_000,
+      timeout: 30_000,
+    }); }
     catch(error) { if(error instanceof Prisma.PrismaClientKnownRequestError && error.code==='P2034' && attempt<3) continue; throw error; }
   }
 }

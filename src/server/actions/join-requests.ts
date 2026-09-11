@@ -44,7 +44,7 @@ export async function cancelJoinRequest(input: unknown) {return perform(async us
 export async function decideJoinRequest(input: unknown) {return perform(async userId=>{
   const {id,mealId,accept}=z.object({id:idSchema,mealId:idSchema,accept:z.boolean()}).parse(input);
   const outcome=await transaction(async tx=>{
-    const meal=await tx.meal.findUnique({where:{id:mealId},include:{matches:{include:{participants:true}}}});ensure(meal?.hostId===userId);
+    const meal=await tx.meal.findUnique({where:{id:mealId},include:{candidates:{select:{date:true}},matches:{include:{participants:true}}}});ensure(meal?.hostId===userId);
     const request=await tx.joinRequest.findUnique({where:{id},include:{candidate:true}});
     ensure(request && request.mealId===mealId);ensure(request.status==='PENDING','この参加希望はすでに処理されています。');
     if(!accept){await tx.joinRequest.update({where:{id},data:{status:'REJECTED'}});return {rejected:true as const};}
@@ -53,15 +53,19 @@ export async function decideJoinRequest(input: unknown) {return perform(async us
     let match=meal.matches[0];
     const start=scheduledAt(request.candidate.date.toISOString().slice(0,10),request.candidate.startTime);
     ensure(start>new Date(),'候補日時が過ぎています。');
-    if(match){ensure(match.status==='ACTIVE','この飯の予定は終了しています。');ensure(match.candidateId===request.candidateId,'確定日と異なる候補です。この希望は承認できません。');ensure(match.participants.length<meal.maxParticipants,'その枠は埋まりました。');ensure(!match.participants.some(p=>p.userId===request.userId),'すでに参加しています。');}
-    else {match=await tx.match.create({data:{mealId,candidateId:request.candidateId,scheduledAt:start,participants:{create:{userId}}},include:{participants:true}});}
-    await tx.matchParticipant.create({data:{matchId:match.id,userId:request.userId}});
+    if(match){
+      ensure(match.status==='ACTIVE','この飯の予定は終了しています。');ensure(match.candidateId===request.candidateId,'確定日と異なる候補です。この希望は承認できません。');ensure(match.participants.length<meal.maxParticipants,'その枠は埋まりました。');ensure(!match.participants.some(p=>p.userId===request.userId),'すでに参加しています。');
+      await tx.matchParticipant.create({data:{matchId:match.id,userId:request.userId}});
+    }
+    else {
+      match=await tx.match.create({data:{mealId,candidateId:request.candidateId,scheduledAt:start,participants:{createMany:{data:[{userId},{userId:request.userId}]}}},include:{participants:true}});
+    }
     await tx.joinRequest.update({where:{id},data:{status:'ACCEPTED'}});
-    const earliestCandidateDate=await tx.mealCandidate.findFirst({where:{mealId},orderBy:{date:'asc'},select:{date:true}}).then(c=>c?.date??null);
+    const earliestCandidateDate=meal.candidates.reduce<Date|null>((earliest,candidate)=>!earliest||candidate.date<earliest?candidate.date:earliest,null);
     const matchingIntent=(await tx.demandIntent.findMany({where:{userId:request.userId,status:'ACTIVE',expiresAt:{gt:new Date()}}}))
       .find(intent=>intentMatchesMeal(intent,{area:meal.area,genre:meal.genre,maxParticipants:meal.maxParticipants,earliestCandidateDate}));
     if(matchingIntent)await tx.demandIntent.update({where:{id:matchingIntent.id},data:{status:'MATCHED',matchedMealId:mealId}});
-    const participantCount=await tx.matchParticipant.count({where:{matchId:match.id}});
+    const participantCount=match.participants.length+(match.participants.some(p=>p.userId===request.userId)?0:1);
     ensure(participantCount<=meal.maxParticipants,'その枠は埋まりました。');
     const full=participantCount===meal.maxParticipants;
     const lastSlot=!full&&participantCount===meal.maxParticipants-1;
@@ -77,16 +81,19 @@ export async function decideJoinRequest(input: unknown) {return perform(async us
     return {rejected:false as const,href:`/matches/${match.id}`,justMatched:full,matchId:match.id,meal:{title:meal.title,area:meal.area,scheduledAt:start.toISOString(),participantCount},requesterId:request.userId,hostId:userId,mealId,mealTitle:meal.title,mealArea:meal.area,demandClusterKey:meal.demandClusterKey,lastSlot,full,participantIds,demandJoinCompleted:Boolean(matchingIntent)};
   });
   if(outcome.rejected)return {};
-  if(outcome.demandJoinCompleted)await recordGrowthEvent('DEMAND_JOIN_COMPLETED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true});
-  await createNotification({userId:outcome.requesterId,type:'JOIN_REQUEST_ACCEPTED',title:'参加が承認されました',body:`「${outcome.mealTitle}」への参加が承認されました。`,mealId:outcome.mealId,dedupeKey:`JOIN_REQUEST_ACCEPTED:${id}`});
-  if(outcome.lastSlot)await createNotification({userId:outcome.hostId,type:'LAST_SLOT_REACHED',title:'残り1席になりました',body:`「${outcome.mealTitle}」はあと1人で成立します。`,mealId:outcome.mealId,dedupeKey:`LAST_SLOT_REACHED:${outcome.mealId}`});
+  const followUps: Promise<unknown>[]=[
+    createNotification({userId:outcome.requesterId,type:'JOIN_REQUEST_ACCEPTED',title:'参加が承認されました',body:`「${outcome.mealTitle}」への参加が承認されました。`,mealId:outcome.mealId,dedupeKey:`JOIN_REQUEST_ACCEPTED:${id}`}),
+  ];
+  if(outcome.demandJoinCompleted)followUps.push(recordGrowthEvent('DEMAND_JOIN_COMPLETED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true}));
+  if(outcome.lastSlot)followUps.push(createNotification({userId:outcome.hostId,type:'LAST_SLOT_REACHED',title:'残り1席になりました',body:`「${outcome.mealTitle}」はあと1人で成立します。`,mealId:outcome.mealId,dedupeKey:`LAST_SLOT_REACHED:${outcome.mealId}`}));
   if(outcome.full){
     for(const participantId of outcome.participantIds){
-      await createNotification({userId:participantId,type:'MEAL_MATCHED',title:'飯、決まりました',body:`「${outcome.mealTitle}」の飯が成立しました。`,mealId:outcome.mealId,dedupeKey:`MEAL_MATCHED:${outcome.mealId}:${participantId}`});
+      followUps.push(createNotification({userId:participantId,type:'MEAL_MATCHED',title:'飯、決まりました',body:`「${outcome.mealTitle}」の飯が成立しました。`,mealId:outcome.mealId,dedupeKey:`MEAL_MATCHED:${outcome.mealId}:${participantId}`}));
     }
-    await recordGrowthEvent('MEAL_MATCHED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true});
-    await checkReferralActivation(outcome.requesterId);
-    if(outcome.demandClusterKey)await recordGrowthEvent('DEMAND_MATCH_COMPLETED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true});
+    followUps.push(recordGrowthEvent('MEAL_MATCHED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true}));
+    followUps.push(checkReferralActivation(outcome.requesterId));
+    if(outcome.demandClusterKey)followUps.push(recordGrowthEvent('DEMAND_MATCH_COMPLETED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true}));
   }
+  await Promise.all(followUps);
   return {href:outcome.href,justMatched:outcome.justMatched,matchId:outcome.matchId,meal:outcome.meal};
 });}

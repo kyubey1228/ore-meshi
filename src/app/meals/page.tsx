@@ -15,8 +15,16 @@ import { RecentlyViewedSection } from '@/components/recently-viewed';
 import { getEmptyStateData } from '@/server/empty-state';
 import { buildEmptyState } from '@/lib/empty-state';
 import { EMPTY_STATE_VARIANTS, getVariant } from '@/lib/experiments';
+import { appUrl } from '@/lib/social';
 
-export const metadata={title:'誰かの飯に乗っかる'};
+const description='現在募集中の飯を探して参加できます。今日の「うまい」を誰かと。';
+const shareImage=`${appUrl()}/api/ugc/invite?style=gag`;
+export const metadata={
+  title:'誰かの飯に乗っかる',
+  description,
+  openGraph:{title:'誰かの飯に乗っかる',description,url:`${appUrl()}/meals`,images:[{url:shareImage,width:1200,height:630}]},
+  twitter:{card:'summary_large_image' as const,title:'誰かの飯に乗っかる',description,images:[shareImage]},
+};
 
 const QUICK_FILTERS: { key: 'when'|'remaining'; value: string; label: string }[] = [
   { key: 'when', value: 'today', label: '今日' },

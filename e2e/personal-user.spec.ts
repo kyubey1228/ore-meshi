@@ -6,12 +6,12 @@ test('個人ユーザー: 一覧・Demand・マイページ・通知設定を横
   await page.goto('/meals');
   await expect(page.getByRole('heading', { name: '誰かの飯に乗っかる。' })).toBeVisible();
   await page.goto('/demand');
-  await expect(page.getByRole('heading')).toContainText('行きたい');
+  await expect(page.getByRole('heading', { name: '行きたい登録', level: 2 })).toBeVisible();
   await page.goto('/mypage');
   await expect(page.getByRole('heading', { name: 'マイページ' })).toBeVisible();
-  await expect(page.getByText('招待実績').or(page.getByText('友達も誘う'))).toBeVisible();
+  await expect(page.getByRole('heading', { name: '友達も誘う', level: 2 })).toBeVisible();
   await page.goto('/notifications');
-  await expect(page.getByRole('heading')).toContainText('通知');
+  await expect(page.getByRole('heading', { name: 'ちょっと一息。', level: 1 })).toBeVisible();
 });
 
 test('個人ユーザー: 未ログイン参加CTAはログイン後の戻り先を保持する', async ({ browser }) => {

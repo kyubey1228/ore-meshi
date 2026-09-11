@@ -13,6 +13,10 @@ export type RankableMeal = {
   sponsoredMeals?: { businessAccount: { planOverride: BusinessPlan | null; subscription: { plan: BusinessPlan; status: SubscriptionStatus; currentPeriodEnd: Date } | null } }[];
 };
 
+function timestamp(value: Date | string) {
+  return value instanceof Date ? value.getTime() : new Date(value).getTime();
+}
+
 export type RankingContext = {
   preferredArea?: string | null;
   preferredGenres?: string[];
@@ -27,7 +31,7 @@ export type RankedMeal<T extends RankableMeal = RankableMeal> = {
 };
 
 function hostQualityBonus(host: RankableMeal['host'], now: Date) {
-  const ageDays = (now.getTime() - host.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+  const ageDays = (now.getTime() - timestamp(host.createdAt)) / (1000 * 60 * 60 * 24);
   let bonus = 0;
   if (host.bio) bonus += 4;
   if (host.image) bonus += 3;
@@ -40,7 +44,7 @@ export function scoreMeal<T extends RankableMeal>(meal: T, context: RankingConte
   const now = context.now ?? new Date();
   const remaining = Math.max(0, meal.maxParticipants - (meal._count.joinRequests + 1));
   const nextCandidate = meal.candidates[0];
-  const hoursUntil = nextCandidate ? (nextCandidate.date.getTime() - now.getTime()) / (1000 * 60 * 60) : null;
+  const hoursUntil = nextCandidate ? (timestamp(nextCandidate.date) - now.getTime()) / (1000 * 60 * 60) : null;
 
   const areaMatch = Boolean(context.preferredArea) && meal.area.toLowerCase().includes(String(context.preferredArea).toLowerCase()) ? 30 : 0;
   const genreMatch = Boolean(meal.genre) && (context.preferredGenres ?? []).some(g => g.toLowerCase() === meal.genre?.toLowerCase()) ? 20 : 0;
@@ -48,7 +52,7 @@ export function scoreMeal<T extends RankableMeal>(meal: T, context: RankingConte
   const lastSlotBonus = remaining === 1 ? 50 : remaining === 2 ? 15 : 0;
   const upcomingBonus = hoursUntil !== null && hoursUntil > 0 ? Math.max(0, 40 - hoursUntil / 2) : 0;
   const hostTrustBonus = hostQualityBonus(meal.host, now);
-  const recencyBonus = Math.max(0, 10 - (now.getTime() - meal.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+  const recencyBonus = Math.max(0, 10 - (now.getTime() - timestamp(meal.createdAt)) / (1000 * 60 * 60 * 24));
   // DiningFeedbackから導出した「好みそうな体験」の軽い加点(最大10)。他人の評価は一切影響しない自分専用の重み。
   const feedbackBonus =
     (context.recommendationProfile?.areas.some(a => a.toLowerCase() === meal.area.toLowerCase()) ? 5 : 0) +
