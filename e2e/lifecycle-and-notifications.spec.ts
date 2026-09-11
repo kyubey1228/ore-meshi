@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { statePath, users } from './fixtures';
 import { createMeal } from './helpers';
 import { db } from './db';
+import { waitForCondition } from './wait';
 
 test.describe.serial('Capacity境界・reload後の状態維持・成立通知', () => {
   let mealUrl: string;
@@ -124,8 +125,10 @@ test.describe.serial('Completed(二重終了防止)とDiningFeedback(重複防�
       p1.getByRole('button', { name: '飯終了' }).click(),
       p2.getByRole('button', { name: '飯終了' }).click(),
     ]);
-    await p1.waitForTimeout(2000);
-    const match = await db.match.findUniqueOrThrow({ where: { id: matchId } });
+    const match = await waitForCondition(
+      () => db.match.findUniqueOrThrow({ where: { id: matchId } }),
+      value => value.status !== 'ACTIVE',
+    );
     expect(match.status).toBe('COMPLETED');
     await c1.close();
     await c2.close();

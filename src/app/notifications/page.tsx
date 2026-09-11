@@ -18,7 +18,7 @@ export default async function NotificationsPage() {
     <section className="section narrow">
       <div className="section-heading">
         <h1>通知</h1>
-        {unreadCount > 0 && <ActionForm label="すべて既読にする" action={() => markAllNotificationsRead()} />}
+        {unreadCount > 0 && <ActionForm label="すべて既読にする" action={markAllNotificationsRead} />}
       </div>
       {notifications.length === 0 ? (
         <div className="empty"><span className="empty-icon">🔔</span><p>通知はまだありません。募集や参加に動きがあるとここに届きます。</p></div>

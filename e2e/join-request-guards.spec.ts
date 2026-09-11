@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { statePath, users } from './fixtures';
 import { createMeal } from './helpers';
 import { db } from './db';
+import { waitForCondition } from './wait';
 
 test.describe.serial('参加申請のガード(自分への応募・締切・キャンセル済み募集)', () => {
   let mealUrl: string;
@@ -88,11 +89,11 @@ test.describe.serial('参加申請のガード(二重応募・二重承認・他
       p1.getByRole('button', { name: 'この募集に参加する' }).click(),
       p2.getByRole('button', { name: 'この募集に参加する' }).click(),
     ]);
-    await Promise.all([
-      p1.waitForSelector('[role="status"], [role="alert"]'),
-      p2.waitForSelector('[role="status"], [role="alert"]'),
-    ]);
-    const count = await db.joinRequest.count({ where: { mealId, userId: user1Id } });
+    // route announcer(role="alert")が最初から存在するため要素待機は使わず、DBの実状態を直接ポーリングする。
+    const count = await waitForCondition(
+      () => db.joinRequest.count({ where: { mealId, userId: user1Id } }),
+      value => value >= 1,
+    );
     expect(count).toBe(1);
     await c1.close();
     await c2.close();
@@ -127,8 +128,10 @@ test.describe.serial('参加申請のガード(二重応募・二重承認・他
       p1.getByRole('button', { name: '一緒に行く' }).first().click(),
       p2.getByRole('button', { name: '一緒に行く' }).first().click(),
     ]);
-    await p1.waitForTimeout(2000);
-    const after = await db.joinRequest.findUniqueOrThrow({ where: { id: before.id } });
+    const after = await waitForCondition(
+      () => db.joinRequest.findUniqueOrThrow({ where: { id: before.id } }),
+      value => value.status !== 'PENDING',
+    );
     expect(after.status).toBe('ACCEPTED');
     const match = await db.match.findUnique({ where: { mealId } });
     const participants = await db.matchParticipant.count({ where: { matchId: match!.id } });
