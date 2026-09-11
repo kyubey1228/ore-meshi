@@ -5,6 +5,10 @@ const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: './e2e',
+  // business-billing.spec.tsはplaywright.billing.config.ts(npm run test:e2e:billing)専用。
+  // このモジュールはimport時点でSTRIPE_SECRET_KEYのtest mode検証を行うため、通常のE2E実行
+  // (本番Stripeキーがそのまま.env.localから見える環境)に含めると意図的に例外で落ちる。
+  testIgnore: /business-billing\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,
