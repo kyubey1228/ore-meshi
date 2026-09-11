@@ -5,11 +5,16 @@ import { recordGrowthEvent } from '@/server/growth';
 import { sendEmail } from '@/server/email';
 import { appUrl } from '@/lib/social';
 import { measurePerformance } from '@/lib/performance';
+import { buildEmailTemplate, notificationCta } from '@/lib/email-templates';
 
 const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
   JOIN_REQUEST_RECEIVED: 'PARTICIPATION',
   JOIN_REQUEST_ACCEPTED: 'PARTICIPATION',
+  JOIN_REQUEST_REJECTED: 'PARTICIPATION',
   MEAL_MATCHED: 'PARTICIPATION',
+  MEAL_REMINDER_24H: 'PARTICIPATION',
+  DINING_FEEDBACK_REQUEST: 'PARTICIPATION',
+  RECRUITMENT_NO_APPLICATIONS: 'RECRUITMENT',
   LAST_SLOT_REACHED: 'RECRUITMENT',
   DEADLINE_SOON: 'RECRUITMENT',
   MEAL_TODAY: 'PARTICIPATION',
@@ -24,16 +29,13 @@ const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
   BUSINESS_CAMPAIGN_NO_ACTIONS: 'BUSINESS',
   BUSINESS_FIRST_RESULT: 'BUSINESS',
   BUSINESS_SUBSCRIPTION_ENDING: 'BUSINESS',
+  BUSINESS_SPONSOR_ENDING: 'BUSINESS',
   BUSINESS_CAMPAIGN_SUMMARY: 'BUSINESS',
 };
 
 // 最初にメール化する通知は絞る(全通知を最初からメール化しない)。ここに無い種類はin-appのみ。
-const EMAIL_WHITELIST: NotificationType[] = ['JOIN_REQUEST_ACCEPTED', 'MEAL_MATCHED', 'DEMAND_MATCH_FOUND', 'MEAL_TODAY', 'DEADLINE_SOON'];
-
-// body には募集タイトル等のユーザー入力が含まれるため、メールHTMLへの埋め込み前に必ずエスケープする。
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
-}
+const TRANSACTIONAL_EMAIL_TYPES: NotificationType[] = ['JOIN_REQUEST_RECEIVED', 'JOIN_REQUEST_ACCEPTED', 'JOIN_REQUEST_REJECTED', 'MEAL_MATCHED', 'MEAL_REMINDER_24H', 'DINING_FEEDBACK_REQUEST', 'DEMAND_MATCH_FOUND', 'MEAL_TODAY', 'DEADLINE_SOON', 'BUSINESS_SUBSCRIPTION_ENDING', 'BUSINESS_SPONSOR_ENDING'];
+const MARKETING_EMAIL_TYPES: NotificationType[] = ['RECRUITMENT_NO_APPLICATIONS', 'BUSINESS_ACTIVATION_REMINDER', 'BUSINESS_CAMPAIGN_NO_VIEWS', 'BUSINESS_CAMPAIGN_NO_ACTIONS', 'BUSINESS_FIRST_RESULT', 'BUSINESS_CAMPAIGN_SUMMARY'];
 
 export type CreateNotificationInput = {
   userId: string;
@@ -42,6 +44,8 @@ export type CreateNotificationInput = {
   body: string;
   mealId?: string;
   dedupeKey: string;
+  // Business通知は呼び出し元でBusinessNotificationPreferenceを確認済み。個人向けmarketing設定と混同しない。
+  businessEmailAllowed?: boolean;
 };
 
 // 冪等: 同じdedupeKeyでの再呼び出しは何もしない(cron等からの重複実行に安全)。
@@ -63,15 +67,13 @@ async function createNotificationInternal(params: CreateNotificationInput) {
     await recordGrowthEvent('NOTIFICATION_CREATED', { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type });
     await recordGrowthEvent('NOTIFICATION_SENT', { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type, channel: 'IN_APP' });
 
-    const emailAllowed = (preference?.emailTransactionalEnabled ?? true) && EMAIL_WHITELIST.includes(params.type);
+    const emailAllowed = params.businessEmailAllowed === true || (TRANSACTIONAL_EMAIL_TYPES.includes(params.type)
+      ? (preference?.emailTransactionalEnabled ?? true)
+      : MARKETING_EMAIL_TYPES.includes(params.type) && (preference?.emailMarketingEnabled ?? false));
     if (emailAllowed && user?.email) {
       const link = `${appUrl()}/api/notifications/${notification.id}/click`;
-      const result = await sendEmail({
-        to: user.email,
-        subject: params.title,
-        text: `${params.body}\n\n${link}`,
-        html: `<p>${escapeHtml(params.body)}</p><p><a href="${link}">アプリで見る →</a></p>`,
-      });
+      const template = buildEmailTemplate({ subject: params.title, body: params.body, ctaLabel: notificationCta(params.type), ctaUrl: link });
+      const result = await sendEmail({ to: user.email, ...template });
       if (result.ok) {
         await prisma.notification.update({ where: { id: notification.id }, data: { emailSentAt: new Date() } });
         await recordGrowthEvent('EMAIL_SENT', { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type });

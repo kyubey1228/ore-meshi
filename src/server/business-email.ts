@@ -3,16 +3,23 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/server/email';
 import { appUrl } from '@/lib/social';
 import type { BusinessNotification } from '@/server/billing/webhook';
+import { buildEmailTemplate } from '@/lib/email-templates';
 
 // 既存Phase4のsendEmail(SMTP)をそのまま再利用する。新しい配信基盤は作らない。
 // Webhookのレスポンスを長時間ブロックしないよう、呼び出し側は必ずawaitせずvoidで呼ぶこと。
 export async function sendBusinessNotificationEmail(notification: BusinessNotification): Promise<void> {
   try {
-    const business = await prisma.businessAccount.findUnique({ where: { id: notification.businessAccountId }, select: { name: true, contactEmail: true } });
-    if (!business?.contactEmail) return;
+    const business = await prisma.businessAccount.findUnique({
+      where: { id: notification.businessAccountId },
+      select: { name: true, members: { where: { role: { in: ['OWNER', 'ADMIN'] } }, orderBy: { createdAt: 'asc' }, select: { user: { select: { email: true } } } } },
+    });
+    if (!business) return;
+    const recipients = [...new Set(business.members.flatMap(member => member.user.email ? [member.user.email] : []))];
+    if (!recipients.length) return;
     const dashboardUrl = `${appUrl()}/business/dashboard`;
     const { subject, body } = buildContent(notification, business.name);
-    await sendEmail({ to: business.contactEmail, subject, text: `${body}\n\n${dashboardUrl}`, html: `<p>${escapeHtml(body)}</p><p><a href="${dashboardUrl}">Business Dashboardを見る →</a></p>` });
+    const template = buildEmailTemplate({ subject, body, ctaLabel: notification.kind === 'PAYMENT_FAILED' ? '契約状況を確認する' : '掲載状況を確認する', ctaUrl: dashboardUrl });
+    await Promise.all(recipients.map(to => sendEmail({ to, ...template })));
   } catch (error) {
     console.error('sendBusinessNotificationEmail failed (support処理は継続)', error instanceof Error ? error.name : 'UnknownError');
   }
@@ -28,9 +35,7 @@ function buildContent(notification: BusinessNotification, businessName: string):
       return { subject: 'エリアスポンサーのお支払いが完了しました', body: `${businessName} 様\n\nエリアスポンサーのお支払いが完了し、掲載が開始されました。` };
     case 'SUBSCRIPTION_UPDATED':
       return { subject: 'プランが更新されました', body: `${businessName} 様\n\n${notification.plan}プランが有効になりました。` };
+    case 'PAYMENT_FAILED':
+      return { subject: 'お支払いを確認できませんでした', body: `${businessName} 様\n\nご利用中のプランについて、お支払いを確認できませんでした。契約状態や支払い情報をご確認ください。` };
   }
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 }

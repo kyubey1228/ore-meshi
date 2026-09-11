@@ -15,6 +15,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   await recordGrowthEvent('NOTIFICATION_CLICKED', { recruitmentId: notification.mealId ?? undefined, loggedIn: true, notificationType: notification.type, channel: 'EMAIL' });
   if (notification.type.startsWith('BUSINESS_')) await recordGrowthEvent('BUSINESS_NOTIFICATION_CLICKED', { loggedIn: true, notificationType: notification.type, channel: 'EMAIL' });
   if (!notification.clickedAt) await recordGrowthEvent('EMAIL_CONVERSION', { recruitmentId: notification.mealId ?? undefined, loggedIn: true, notificationType: notification.type });
-  const target = notification.mealId ? `${appUrl()}/meals/${notification.mealId}` : `${appUrl()}/notifications`;
+  let target = notification.mealId ? `${appUrl()}/meals/${notification.mealId}` : `${appUrl()}/notifications`;
+  if (notification.mealId && ['JOIN_REQUEST_ACCEPTED', 'MEAL_MATCHED', 'MEAL_REMINDER_24H', 'DINING_FEEDBACK_REQUEST', 'MEAL_TODAY'].includes(notification.type)) {
+    const match = await prisma.match.findUnique({ where: { mealId: notification.mealId }, select: { id: true } });
+    if (match) target = `${appUrl()}/matches/${match.id}`;
+  } else if (notification.type === 'JOIN_REQUEST_REJECTED') target = `${appUrl()}/meals`;
+  else if (notification.type.startsWith('BUSINESS_')) target = `${appUrl()}/business/dashboard`;
   return NextResponse.redirect(target);
 }

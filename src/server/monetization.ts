@@ -59,6 +59,26 @@ export async function getMonetizationSummary(days: number) {
   return unstable_cache(computeMonetizationSummary, ['monetization-summary'], { revalidate: 60 })(days);
 }
 
+async function computeEmailAnalytics(days: number) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const rows = await prisma.notification.groupBy({
+    by: ['type'], where: { createdAt: { gte: since }, OR: [{ emailSentAt: { not: null } }, { emailFailedAt: { not: null } }] },
+    _count: { _all: true, emailSentAt: true, emailFailedAt: true, emailClickedAt: true },
+  });
+  const templates = rows.map(row => ({ template: row.type, sent: row._count.emailSentAt, failed: row._count.emailFailedAt, clicked: row._count.emailClickedAt }));
+  const sent = templates.reduce((sum, row) => sum + row.sent, 0);
+  const failed = templates.reduce((sum, row) => sum + row.failed, 0);
+  const clicked = templates.reduce((sum, row) => sum + row.clicked, 0);
+  const businessSent = templates.filter(row => row.template.startsWith('BUSINESS_')).reduce((sum, row) => sum + row.sent, 0);
+  const sponsorRelated = templates.filter(row => ['BUSINESS_CAMPAIGN_NO_VIEWS', 'BUSINESS_CAMPAIGN_NO_ACTIONS', 'BUSINESS_FIRST_RESULT', 'BUSINESS_CAMPAIGN_SUMMARY'].includes(row.template)).reduce((sum, row) => sum + row.sent, 0);
+  return { sent, failed, clicked, ctr: sent ? clicked / sent : 0, businessSent, sponsorRelated, templates };
+}
+
+export async function getEmailAnalytics(days: number) {
+  await requireAdmin();
+  return unstable_cache(computeEmailAnalytics, ['email-analytics'], { revalidate: 60 })(days);
+}
+
 // Repeat Buyer = 期間内にPAID状態の単発スポンサー商品(スポンサー飯/空席スポンサー)を2回以上購入したBusiness。
 // PAID状態のSponsorOrderと有効なSubscription同期状態のみを売上のsource of truthとし、Checkout Startedは含めない。
 async function computeRetentionStats(days: number) {

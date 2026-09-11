@@ -8,7 +8,8 @@ export type BusinessNotification =
   | { kind: 'SPONSORED_MEAL_PAID'; businessAccountId: string; mealId: string | null }
   | { kind: 'SEAT_CAMPAIGN_PAID'; businessAccountId: string }
   | { kind: 'AREA_FEATURED_PAID'; businessAccountId: string }
-  | { kind: 'SUBSCRIPTION_UPDATED'; businessAccountId: string; plan: string };
+  | { kind: 'SUBSCRIPTION_UPDATED'; businessAccountId: string; plan: string }
+  | { kind: 'PAYMENT_FAILED'; businessAccountId: string };
 
 function stripeId(value: string | { id: string } | null) {
   return typeof value === 'string' ? value : value?.id ?? null;
@@ -202,6 +203,9 @@ export async function processStripeEvent(event: Stripe.Event) {
         }
       }
       if (subscription) notification = await syncSubscription(tx, subscription) ?? notification;
+      if (event.type === 'invoice.payment_failed' && subscription?.metadata.businessAccountId) {
+        notification = { kind: 'PAYMENT_FAILED', businessAccountId: subscription.metadata.businessAccountId };
+      }
     });
     return { duplicate: false, notification };
   } catch (error) {

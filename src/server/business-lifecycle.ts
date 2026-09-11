@@ -17,7 +17,7 @@ export async function notifyBusiness(businessAccountId: string, message: Lifecyc
   if (existing || preference?.[message.preference] === false || members.length === 0) return 0;
   const results = await Promise.all(members.map(member => createNotification({
     userId: member.userId, type: message.type, title: message.title, body: message.body,
-    dedupeKey: `BUSINESS:${message.triggerKey}:${member.userId}`,
+    dedupeKey: `BUSINESS:${message.triggerKey}:${member.userId}`, businessEmailAllowed: true,
   })));
   const recipientCount = results.filter(Boolean).length;
   await prisma.businessNotificationLog.create({ data: { businessAccountId, notificationType: message.type, triggerKey: message.triggerKey, recipientCount } }).catch(() => null);
@@ -35,7 +35,8 @@ export async function processBusinessLifecycleBatch(cursor: string | null, limit
       _count: { select: { sponsoredMeals: true, seatCampaigns: true, coupons: true } },
       subscription: { select: { currentPeriodEnd: true, cancelAtPeriodEnd: true, status: true } },
       sponsoredMeals: { where: { status: 'ACTIVE' }, select: { id: true, startsAt: true }, take: 10 },
-      seatCampaigns: { where: { endsAt: { gte: dayAgo, lte: new Date(now.getTime() + 2 * 3_600_000) }, status: { in: ['ACTIVE', 'ENDED'] } }, select: { id: true, endsAt: true }, take: 10 },
+      seatCampaigns: { where: { endsAt: { gte: dayAgo, lte: new Date(now.getTime() + 48 * 3_600_000) }, status: { in: ['ACTIVE', 'ENDED'] } }, select: { id: true, endsAt: true }, take: 10 },
+      areaSponsorships: { where: { endsAt: { gt: now, lte: new Date(now.getTime() + 48 * 3_600_000) }, status: 'ACTIVE' }, select: { id: true, area: true, endsAt: true }, take: 10 },
     },
   });
   const accountIds = accounts.map(account => account.id);
@@ -60,13 +61,16 @@ export async function processBusinessLifecycleBatch(cursor: string | null, limit
     const actions = referralCount(account.id, ['JOIN_REQUEST', 'MATCHED', 'COMPLETED', 'COUPON_REDEEMED']);
     const allViews = referralCount(account.id, ['X_VISIT']);
     if (allViews >= 5 && actions === 0) sent += await notifyBusiness(account.id, { type: 'BUSINESS_CAMPAIGN_NO_ACTIONS', preference: 'campaignPerformanceEnabled', triggerKey: `views-no-actions:${account.id}`, title: '掲載が見られています', body: `${allViews}件のX経由アクセスがありましたが、まだ参加などの反応はありません。特典や投稿内容を見直してみましょう。` });
-    if (actions > 0) sent += await notifyBusiness(account.id, { type: 'BUSINESS_FIRST_RESULT', preference: 'activityEnabled', triggerKey: `first-result:${account.id}`, title: '初めてユーザーが反応しました', body: '掲載から参加・成立・クーポン利用のいずれかの反応が発生しました。店舗Analyticsで成果を確認できます。' });
-    if (actions > 0) sent += await notifyBusiness(account.id, { type: 'BUSINESS_FIRST_RESULT', preference: 'activityEnabled', triggerKey: `first-result:${account.id}`, title: '初めてユーザーが反応しました', body: `${account.name}の掲載からユーザーの行動が発生しました。店舗管理画面で成果を確認できます。` });
-    if (allViews >= 5 && actions === 0) sent += await notifyBusiness(account.id, { type: 'BUSINESS_CAMPAIGN_NO_ACTIONS', preference: 'campaignPerformanceEnabled', triggerKey: `views-no-actions:${account.id}`, title: '掲載は見られています', body: `${allViews}件のアクセスがありますが、まだ参加などの行動はありません。特典や説明を見直す候補です。` });
     for (const campaign of account.seatCampaigns.filter(item => item.endsAt > now && item.endsAt <= new Date(now.getTime() + 2 * 3_600_000))) {
       const views = viewCount.get(account.id) ?? 0;
       if (views === 0) sent += await notifyBusiness(account.id, { type: 'BUSINESS_CAMPAIGN_NO_VIEWS', preference: 'campaignPerformanceEnabled', triggerKey: `seat-no-views:${campaign.id}`, title: '空席掲載の終了が近づいています', body: 'まだ閲覧がありません。時間帯や内容を調整すると見られやすくなる可能性があります。' });
       if (campaign.endsAt <= now) sent += await notifyBusiness(account.id, { type: 'BUSINESS_CAMPAIGN_SUMMARY', preference: 'campaignPerformanceEnabled', triggerKey: `seat-summary:${campaign.id}`, title: '空席掲載が終了しました', body: views > 0 ? `掲載期間中に${views}件閲覧されました。次の掲載改善にお使いください。` : '掲載期間が終了しました。今回は計測できた閲覧がありませんでした。' });
+    }
+    for (const campaign of account.seatCampaigns.filter(item => item.endsAt > new Date(now.getTime() + 24 * 3_600_000) && item.endsAt <= new Date(now.getTime() + 48 * 3_600_000))) {
+      sent += await notifyBusiness(account.id, { type: 'BUSINESS_SPONSOR_ENDING', preference: 'campaignPerformanceEnabled', triggerKey: `seat-ending:${campaign.id}`, title: 'スポンサー掲載がまもなく終了します', body: `空席スポンサー掲載は${campaign.endsAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}に終了予定です。掲載状況をご確認ください。` });
+    }
+    for (const campaign of account.areaSponsorships) {
+      sent += await notifyBusiness(account.id, { type: 'BUSINESS_SPONSOR_ENDING', preference: 'campaignPerformanceEnabled', triggerKey: `area-ending:${campaign.id}`, title: 'スポンサー掲載がまもなく終了します', body: `${campaign.area}のエリアスポンサー掲載は${campaign.endsAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}に終了予定です。` });
     }
   }
   return { processed: accounts.length, sent, cursor: accounts.at(-1)?.id ?? null, hasMore: accounts.length === limit };

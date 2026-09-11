@@ -11,6 +11,9 @@ function transport() {
     port: Number(process.env.SMTP_PORT ?? 587),
     secure: process.env.SMTP_SECURE === 'true',
     auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+    connectionTimeout: 8_000,
+    greetingTimeout: 8_000,
+    socketTimeout: 15_000,
   });
 }
 
@@ -21,10 +24,15 @@ export function emailEnabled() {
 export async function sendEmail(input: { to: string; subject: string; html: string; text: string }): Promise<{ ok: true } | { ok: false; error: string }> {
   const t = transport();
   if (!t) return { ok: false, error: 'SMTP_HOST未設定のため送信をスキップしました。' };
-  try {
-    await t.sendMail({ from: process.env.SMTP_FROM ?? '"俺は誰かと飯が食いたい！" <no-reply@ore-meshi.app>', to: input.to, subject: input.subject, html: input.html, text: input.text });
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'unknown error' };
+  let lastError = 'unknown error';
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await t.sendMail({ from: process.env.SMTP_FROM ?? '"俺は誰かと飯が食いたい！" <no-reply@ore-meshi.app>', to: input.to, subject: input.subject, html: input.html, text: input.text });
+      return { ok: true };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : 'unknown error';
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 250));
+    }
   }
+  return { ok: false, error: lastError };
 }

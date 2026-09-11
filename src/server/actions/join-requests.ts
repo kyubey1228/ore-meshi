@@ -26,11 +26,11 @@ export async function createJoinRequest(input: unknown) {return perform(async us
     if(!meal.firstJoinAt)await tx.meal.update({where:{id:meal.id},data:{firstJoinAt:new Date()}});
     if(attribution)await tx.referralEvent.create({data:{businessAccountId:attribution.businessAccountId,socialPostId:attribution.socialPostId,entityType:attribution.entityType,entityId:attribution.entityId,eventType:'JOIN_REQUEST',sourceEventId:attribution.id,conversionEntityId:request.id,utmSource:attribution.utmSource,utmMedium:attribution.utmMedium,utmCampaign:attribution.utmCampaign,anonymousId:attribution.anonymousId}});
     const earliestCandidateDate=meal.candidates.map(c=>c.date).sort((a,b)=>a.getTime()-b.getTime())[0]??null;
-    return {requestId:request.id,hostId:meal.hostId,mealId:meal.id,mealTitle:meal.title,mealArea:meal.area,mealGenre:meal.genre,maxParticipants:meal.maxParticipants,earliestCandidateDate};
+    return {requestId:request.id,hostId:meal.hostId,mealId:meal.id,mealTitle:meal.title,mealArea:meal.area,mealGenre:meal.genre,maxParticipants:meal.maxParticipants,earliestCandidateDate,requestedAt:scheduledAt(candidate.date.toISOString().slice(0,10),candidate.startTime)};
   });
   await createNotification({
     userId:outcome.hostId,type:'JOIN_REQUEST_RECEIVED',
-    title:'参加申請が届きました',body:`「${outcome.mealTitle}」に参加希望が届きました。`,
+    title:'あなたの募集に参加希望が届きました',body:`「${outcome.mealTitle}」に参加希望が届きました。\n\n日時: ${outcome.requestedAt.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})}\n場所: ${outcome.mealArea}\n\n参加希望者を確認してください。`,
     mealId:outcome.mealId,dedupeKey:`JOIN_REQUEST_RECEIVED:${outcome.requestId}`,
   });
   await checkReferralActivation(userId);
@@ -47,7 +47,7 @@ export async function decideJoinRequest(input: unknown) {return perform(async us
     const meal=await tx.meal.findUnique({where:{id:mealId},include:{candidates:{select:{date:true}},matches:{include:{participants:true}}}});ensure(meal?.hostId===userId);
     const request=await tx.joinRequest.findUnique({where:{id},include:{candidate:true}});
     ensure(request && request.mealId===mealId);ensure(request.status==='PENDING','この参加希望はすでに処理されています。');
-    if(!accept){await tx.joinRequest.update({where:{id},data:{status:'REJECTED'}});return {rejected:true as const};}
+    if(!accept){await tx.joinRequest.update({where:{id},data:{status:'REJECTED'}});return {rejected:true as const,requesterId:request.userId,mealId,mealTitle:meal.title};}
     ensure(meal.status==='OPEN','その飯はもう募集が終わっています。');ensure(!meal.deadline || meal.deadline>new Date(),'募集の締切を過ぎています。');
     ensure(request.userId!==userId && request.candidate.mealId===meal.id);
     let match=meal.matches[0];
@@ -80,15 +80,18 @@ export async function decideJoinRequest(input: unknown) {return perform(async us
     await tx.joinRequest.updateMany({where:{mealId,status:'PENDING',...(full?{}:{candidateId:{not:request.candidateId}})},data:{status:'REJECTED'}});
     return {rejected:false as const,href:`/matches/${match.id}`,justMatched:full,matchId:match.id,meal:{title:meal.title,area:meal.area,scheduledAt:start.toISOString(),participantCount},requesterId:request.userId,hostId:userId,mealId,mealTitle:meal.title,mealArea:meal.area,demandClusterKey:meal.demandClusterKey,lastSlot,full,participantIds,demandJoinCompleted:Boolean(matchingIntent)};
   });
-  if(outcome.rejected)return {};
+  if(outcome.rejected){
+    await createNotification({userId:outcome.requesterId,type:'JOIN_REQUEST_REJECTED',title:'今回はこの募集への参加が成立しませんでした',body:`「${outcome.mealTitle}」への参加は今回は成立しませんでした。また飯を食べたくなったら、ほかの募集も見てみてください。`,mealId:outcome.mealId,dedupeKey:`JOIN_REQUEST_REJECTED:${id}`});
+    return {};
+  }
   const followUps: Promise<unknown>[]=[
-    createNotification({userId:outcome.requesterId,type:'JOIN_REQUEST_ACCEPTED',title:'参加が承認されました',body:`「${outcome.mealTitle}」への参加が承認されました。`,mealId:outcome.mealId,dedupeKey:`JOIN_REQUEST_ACCEPTED:${id}`}),
+    createNotification({userId:outcome.requesterId,type:'JOIN_REQUEST_ACCEPTED',title:'飯の予定が決まりました 🍚',body:`参加希望していた「${outcome.mealTitle}」への参加が承認されました。\n\n日時: ${new Date(outcome.meal.scheduledAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})}\n場所: ${outcome.meal.area}`,mealId:outcome.mealId,dedupeKey:`JOIN_REQUEST_ACCEPTED:${id}`}),
   ];
   if(outcome.demandJoinCompleted)followUps.push(recordGrowthEvent('DEMAND_JOIN_COMPLETED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true}));
   if(outcome.lastSlot)followUps.push(createNotification({userId:outcome.hostId,type:'LAST_SLOT_REACHED',title:'残り1席になりました',body:`「${outcome.mealTitle}」はあと1人で成立します。`,mealId:outcome.mealId,dedupeKey:`LAST_SLOT_REACHED:${outcome.mealId}`}));
   if(outcome.full){
     for(const participantId of outcome.participantIds){
-      followUps.push(createNotification({userId:participantId,type:'MEAL_MATCHED',title:'飯、決まりました',body:`「${outcome.mealTitle}」の飯が成立しました。`,mealId:outcome.mealId,dedupeKey:`MEAL_MATCHED:${outcome.mealId}:${participantId}`}));
+      followUps.push(createNotification({userId:participantId,type:'MEAL_MATCHED',title:'一緒に飯を食う人が決まりました',body:`「${outcome.mealTitle}」の飯が成立しました。\n\n日時: ${new Date(outcome.meal.scheduledAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})}\n場所: ${outcome.meal.area}\n参加人数: ${outcome.meal.participantCount}人`,mealId:outcome.mealId,dedupeKey:`MEAL_MATCHED:${outcome.mealId}:${participantId}`}));
     }
     followUps.push(recordGrowthEvent('MEAL_MATCHED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true}));
     followUps.push(checkReferralActivation(outcome.requesterId));

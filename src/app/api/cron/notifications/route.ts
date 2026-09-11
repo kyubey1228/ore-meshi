@@ -37,16 +37,25 @@ export async function GET(request: Request) {
     const completionCursor = url.searchParams.get('completionCursor');
     const staleCursor = url.searchParams.get('staleCursor');
     const winBackCursor = url.searchParams.get('winBackCursor');
+    const reminderCursor = url.searchParams.get('reminderCursor');
+    const feedbackCursor = url.searchParams.get('feedbackCursor');
+    const noApplicationsCursor = url.searchParams.get('noApplicationsCursor');
     const now = new Date();
     const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const in2h = new Date(now.getTime() + 2 * 60 * 60 * 1000);
     const in2hAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const reminderFrom = new Date(now.getTime() + 23 * 60 * 60 * 1000);
+    const reminderTo = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+    const feedbackFrom = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+    const feedbackTo = new Date(now.getTime() - 20 * 60 * 60 * 1000);
+    const noApplicationsFrom = new Date(now.getTime() - 72 * 60 * 60 * 1000);
+    const noApplicationsTo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     // 登録から3〜10日経っても一度も募集・参加していないユーザーへの一度きりのきっかけ通知。
     // 10日を超えたユーザーは対象から外れる(いつまでも古いユーザーを再処理し続けないための窓)。
     const winBackWindowStart = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
     const winBackWindowEnd = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-    const [deadlineSoon, todayMatches, soonMatches, awaitingCompletion, expired, staleCandidates, winBackCandidates] = await Promise.all([
+    const [deadlineSoon, todayMatches, soonMatches, awaitingCompletion, expired, staleCandidates, winBackCandidates, reminderMatches, feedbackMatches, noApplicationMeals] = await Promise.all([
       prisma.meal.findMany({ where: { ...cursorWhere(mealCursor), status: 'OPEN', deadline: { gt: now, lte: in24h } }, select: { id: true, title: true, hostId: true }, orderBy: { id: 'asc' }, take: limit }),
       prisma.match.findMany({ where: { ...cursorWhere(matchCursor), status: 'ACTIVE', scheduledAt: { gte: now, lte: jstEndOfTodayUTC(now) } }, select: { id: true, mealId: true, meal: { select: { title: true } }, participants: { select: { userId: true } } }, orderBy: { id: 'asc' }, take: limit }),
       prisma.match.findMany({ where: { ...cursorWhere(matchCursor), status: 'ACTIVE', scheduledAt: { gt: now, lte: in2h } }, select: { id: true, mealId: true, meal: { select: { title: true } }, participants: { select: { userId: true } } }, orderBy: { id: 'asc' }, take: limit }),
@@ -56,6 +65,9 @@ export async function GET(request: Request) {
       // 開始時刻を使った正確な判定はJS側で行う(候補ごとのstartTimeを跨いだ比較はDBクエリだけでは表現できないため)。
       prisma.meal.findMany({ where: { ...cursorWhere(staleCursor), status: 'OPEN', candidates: { every: { date: { lte: jstEndOfTodayUTC(now) } }, some: {} } }, select: { id: true, title: true, hostId: true, candidates: { select: { date: true, startTime: true } } }, orderBy: { id: 'asc' }, take: limit }),
       prisma.user.findMany({ where: { ...cursorWhere(winBackCursor), createdAt: { gte: winBackWindowStart, lte: winBackWindowEnd }, hostedMeals: { none: {} }, joinRequests: { none: {} } }, select: { id: true }, orderBy: { id: 'asc' }, take: limit }),
+      prisma.match.findMany({ where: { ...cursorWhere(reminderCursor), status: 'ACTIVE', scheduledAt: { gte: reminderFrom, lte: reminderTo } }, select: { id: true, mealId: true, scheduledAt: true, meal: { select: { title: true, area: true, restaurant: true } }, participants: { select: { userId: true } } }, orderBy: { id: 'asc' }, take: limit }),
+      prisma.match.findMany({ where: { ...cursorWhere(feedbackCursor), status: 'COMPLETED', completedAt: { gte: feedbackFrom, lte: feedbackTo } }, select: { id: true, mealId: true, meal: { select: { title: true } }, participants: { select: { userId: true } }, diningFeedbacks: { select: { fromUserId: true, toUserId: true } } }, orderBy: { id: 'asc' }, take: limit }),
+      prisma.meal.findMany({ where: { ...cursorWhere(noApplicationsCursor), status: 'OPEN', createdAt: { gte: noApplicationsFrom, lte: noApplicationsTo }, joinRequests: { none: {} }, candidates: { some: { date: { gte: now } } } }, select: { id: true, hostId: true, title: true }, orderBy: { id: 'asc' }, take: limit }),
     ]);
     const toClose = staleCandidates.filter(meal => shouldAutoCloseMeal(meal.candidates, now));
     if (toClose.length) {
@@ -79,6 +91,26 @@ export async function GET(request: Request) {
     sent += await chunks(toClose, async meal => Number(Boolean(await createNotification({ userId: meal.hostId, type: 'MEAL_AUTO_CLOSED', title: '募集を自動的に終了しました', body: `「${meal.title}」は候補日時をすべて過ぎたため、募集を終了しました。`, mealId: meal.id, dedupeKey: `MEAL_AUTO_CLOSED:${meal.id}` }))));
     sent += await chunks(winBackCandidates, async user => Number(Boolean(await createNotification({ userId: user.id, type: 'WIN_BACK_FIRST_ACTION', title: 'まだ誰とも飯を食べてない？', body: '気になる募集に「参加する」を押すだけでOK。今日、誰かと飯を食べてみませんか？', dedupeKey: `WIN_BACK_FIRST_ACTION:${user.id}` }))));
 
-    return NextResponse.json({ ok: true, notificationsSent: sent, demandIntentsExpired: expired.count, mealsAutoClosed: toClose.length, limit, hasMore: deadlineSoon.length === limit || todayMatches.length === limit || soonMatches.length === limit || awaitingCompletion.length === limit || staleCandidates.length === limit || winBackCandidates.length === limit, nextCursor: { mealCursor: deadlineSoon.at(-1)?.id ?? null, matchCursor: todayMatches.at(-1)?.id ?? soonMatches.at(-1)?.id ?? null, completionCursor: awaitingCompletion.at(-1)?.id ?? null, staleCursor: staleCandidates.at(-1)?.id ?? null, winBackCursor: winBackCandidates.at(-1)?.id ?? null } });
+    const reminderJobs = reminderMatches.flatMap(match => match.participants.map(participant => ({ match, userId: participant.userId })));
+    sent += await chunks(reminderJobs, async ({ match, userId }) => Number(Boolean(await createNotification({
+      userId, type: 'MEAL_REMINDER_24H', title: '明日の飯、忘れてませんか？',
+      body: `明日は「${match.meal.title}」の飯の予定があります。\n\n日時: ${match.scheduledAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}\n場所: ${match.meal.area}${match.meal.restaurant ? ` / ${match.meal.restaurant}` : ''}`,
+      mealId: match.mealId, dedupeKey: `MEAL_REMINDER_24H:${match.id}:${userId}`,
+    }))));
+
+    const feedbackJobs = feedbackMatches.flatMap(match => match.participants
+      .filter(participant => match.participants.some(other => other.userId !== participant.userId && !match.diningFeedbacks.some(feedback => feedback.fromUserId === participant.userId && feedback.toUserId === other.userId)))
+      .map(participant => ({ match, userId: participant.userId })));
+    sent += await chunks(feedbackJobs, async ({ match, userId }) => Number(Boolean(await createNotification({
+      userId, type: 'DINING_FEEDBACK_REQUEST', title: '昨日の飯、どうでした？', body: `「${match.meal.title}」で一緒に飯を食べた時間はいかがでしたか？\n\n短い感想だけでも大丈夫です。`,
+      mealId: match.mealId, dedupeKey: `DINING_FEEDBACK_REQUEST:${match.id}:${userId}`,
+    }))));
+
+    sent += await chunks(noApplicationMeals, async meal => Number(Boolean(await createNotification({
+      userId: meal.hostId, type: 'RECRUITMENT_NO_APPLICATIONS', title: 'まだ席、空いてます', body: `「${meal.title}」にはまだ参加希望が届いていません。\n\n必要なら、時間や場所を少し調整したり、SNSで共有してみることもできます。`,
+      mealId: meal.id, dedupeKey: `RECRUITMENT_NO_APPLICATIONS:${meal.id}`,
+    }))));
+
+    return NextResponse.json({ ok: true, notificationsSent: sent, demandIntentsExpired: expired.count, mealsAutoClosed: toClose.length, limit, hasMore: deadlineSoon.length === limit || todayMatches.length === limit || soonMatches.length === limit || awaitingCompletion.length === limit || staleCandidates.length === limit || winBackCandidates.length === limit || reminderMatches.length === limit || feedbackMatches.length === limit || noApplicationMeals.length === limit, nextCursor: { mealCursor: deadlineSoon.at(-1)?.id ?? null, matchCursor: todayMatches.at(-1)?.id ?? soonMatches.at(-1)?.id ?? null, completionCursor: awaitingCompletion.at(-1)?.id ?? null, staleCursor: staleCandidates.at(-1)?.id ?? null, winBackCursor: winBackCandidates.at(-1)?.id ?? null, reminderCursor: reminderMatches.at(-1)?.id ?? null, feedbackCursor: feedbackMatches.at(-1)?.id ?? null, noApplicationsCursor: noApplicationMeals.at(-1)?.id ?? null } });
   });
 }

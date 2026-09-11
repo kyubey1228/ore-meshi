@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getAreaGenreDashboard, getOpportunityRanking, getSalesSummary, MIN_BUSINESS_SAMPLE_SIZE } from '@/server/business-intelligence';
 import { getAcquisitionDashboard, getCampaignDashboard } from '@/server/acquisition';
-import { getMonetizationSummary, getRetentionStats, getSponsorCompletionStats } from '@/server/monetization';
+import { getEmailAnalytics, getMonetizationSummary, getRetentionStats, getSponsorCompletionStats } from '@/server/monetization';
 import { measurePerformance } from '@/lib/performance';
 
 export const metadata = { title: 'Business Dashboard' };
@@ -13,7 +13,7 @@ function percent(n: number) { return `${Math.round(n * 100)}%`; }
 export default async function BusinessDashboard({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const { days: rawDays } = await searchParams;
   const days = PERIODS.includes(Number(rawDays)) ? Number(rawDays) : 30;
-  const [areaGenre, opportunity, salesSummary, acquisition, campaigns, monetization, retention, sponsorCompletion] = await measurePerformance('ADMIN', 'business dashboard aggregates', () => Promise.all([
+  const [areaGenre, opportunity, salesSummary, acquisition, campaigns, monetization, retention, sponsorCompletion, emailAnalytics] = await measurePerformance('ADMIN', 'business dashboard aggregates', () => Promise.all([
     getAreaGenreDashboard(days),
     getOpportunityRanking(days),
     getSalesSummary(days),
@@ -22,6 +22,7 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
     getMonetizationSummary(days),
     getRetentionStats(days),
     getSponsorCompletionStats(days),
+    getEmailAnalytics(days),
   ]));
 
   return (
@@ -41,6 +42,21 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
         <Link className="text-link" href="/admin/sales">営業候補・Sales Queueへ →</Link>
       </div>
       <p className="muted">店舗営業・スポンサー営業に使えるデータのみを表示しています。個人のメールアドレス・食事履歴・個別のDemand Intent所有者は一切表示しません。n＜{MIN_BUSINESS_SAMPLE_SIZE}の集計は「データ不足」として抑制しています。</p>
+
+      <div className="panel">
+        <h2>メール通知（過去{days}日）</h2>
+        <div className="analytics-grid">
+          <div><strong>{emailAnalytics.sent}</strong><span>送信成功</span></div>
+          <div><strong>{emailAnalytics.failed}</strong><span>送信失敗</span></div>
+          <div><strong>{emailAnalytics.clicked}</strong><span>CTAクリック</span></div>
+          <div><strong>{percent(emailAnalytics.ctr)}</strong><span>CTR</span></div>
+          <div><strong>{emailAnalytics.businessSent}</strong><span>Business向けLifecycle</span></div>
+          <div><strong>{emailAnalytics.sponsorRelated}</strong><span>Sponsor関連</span></div>
+        </div>
+        {emailAnalytics.templates.length > 0 && <div className="comparison-scroll"><table><thead><tr><th>Template</th><th>Sent</th><th>Failed</th><th>Clicked</th><th>CTR</th></tr></thead><tbody>
+          {emailAnalytics.templates.map(row => <tr key={row.template}><td>{row.template}</td><td>{row.sent}</td><td>{row.failed}</td><td>{row.clicked}</td><td>{percent(row.sent ? row.clicked / row.sent : 0)}</td></tr>)}
+        </tbody></table></div>}
+      </div>
 
       <div className="panel">
         <h2>収益サマリー（過去{days}日）</h2>
