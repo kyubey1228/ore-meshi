@@ -19,6 +19,8 @@ export default defineConfig({
     url: `${baseURL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
     env: {
       DATABASE_URL: process.env.E2E_DATABASE_URL ?? '',
       DIRECT_URL: process.env.E2E_DATABASE_URL ?? '',
