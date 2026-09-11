@@ -29,7 +29,9 @@ test.describe.serial('参加申請のガード(自分への応募・締切・キ
     const page = await context.newPage();
     await page.goto(mealUrl);
     await page.getByRole('button', { name: 'この募集に参加する' }).click();
-    await expect(page.getByRole('alert')).toContainText('締切');
+    // getByRole('alert')はNext.jsのroute announcer(#__next-route-announcer__)もヒットするため、
+    // ActionFormが失敗時に付ける.errorクラスで一意に絞り込む。
+    await expect(page.locator('p.error')).toContainText('締切');
     const count = await db.joinRequest.count({ where: { mealId } });
     expect(count).toBe(0);
     await db.meal.update({ where: { id: mealId }, data: { deadline: null } });

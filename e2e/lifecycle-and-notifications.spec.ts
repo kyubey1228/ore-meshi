@@ -33,9 +33,11 @@ test.describe.serial('Capacity境界・reload後の状態維持・成立通知',
     const context = await browser.newContext({ storageState: statePath('business') });
     const page = await context.newPage();
     await page.goto(mealUrl);
+    // maxParticipants=3で3人が応募しているため、1人承認した時点では残り2件がPENDINGのまま
+    // (host+1人=2人でまだ定員に満たない)。2人目を承認した時点で定員に達しMATCHEDになる。
     const buttons = page.getByRole('button', { name: '一緒に行く' });
     await buttons.first().click();
-    await expect(buttons).toHaveCount(1, { timeout: 20_000 });
+    await expect(buttons).toHaveCount(2, { timeout: 20_000 });
     await buttons.first().click();
     await expect(page.getByRole('heading', { name: '飯、決まった。' })).toBeVisible({ timeout: 20_000 });
     await context.close();
