@@ -8,3 +8,9 @@ export const users = {
 export const statePath = (key: keyof typeof users) => `e2e/.auth/${key}.json`;
 export const mealTitle = `${E2E_PREFIX}-二人飯`;
 export const multiMealTitle = `${E2E_PREFIX}-複数人飯`;
+
+// Billing E2E専用。通常のE2E(global-setup.ts)とはビジネスアカウント/認証状態を分け、
+// 誤ってどちらかの実行がもう一方のfixtureファイルを上書きしないようにする。
+export const billingBusinessSlug = `${E2E_PREFIX}-billing-business`;
+export const billingBusinessStatePath = 'e2e/.auth/billing-business.json';
+export const billingFixturePath = 'e2e/.auth/billing-fixture.json';

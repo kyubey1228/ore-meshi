@@ -4,7 +4,7 @@ import { currentUserId } from '@/server/auth';
 import { ensure } from '@/server/action';
 import { isCampaignShareable, type CampaignKind, type CampaignShareData } from '@/features/x-sharing/templates';
 import { cookies } from 'next/headers';
-import { getBusinessPricingCatalog } from '@/server/billing';
+import { getBusinessPricingCatalog, getPublicBusinessPlan, capabilitiesForPlan } from '@/server/billing';
 
 export async function businessPostingMembership(businessAccountId?:string){
   const userId=await currentUserId();ensure(userId,'Twitter/Xでログインしてください。');
@@ -109,6 +109,15 @@ export async function getReferralAttribution(){
   return prisma.referralEvent.findFirst({where:{id:eventId,eventType:'X_VISIT',createdAt:{gt:new Date(Date.now()-30*24*60*60*1000)}}});
 }
 
-export function campaignIsShareable(data:CampaignShareData,now=new Date()){
-  return isCampaignShareable(data,now);
+// DIRECT_AD_CAMPAIGNは決済フローを持たず、作成時にcanCreateDirectAd(PRO等)を確認して即ACTIVEになる
+// (サブスクの「特典」であり単発購入ではない)。作成後にサブスクが失効しても既存レコードのstatusは
+// 自動では変わらないため、公開ページで表示するたびに「今も」その特典を持っているかを再確認する
+// (支払い権限を失ったBusinessの有料露出が一般ユーザーに見え続けるのを防ぐ)。
+export async function campaignIsShareable(data:CampaignShareData,now=new Date()){
+  if(!isCampaignShareable(data,now))return false;
+  if(data.kind==='DIRECT_AD_CAMPAIGN'){
+    const plan=await getPublicBusinessPlan(data.businessAccountId);
+    if(!capabilitiesForPlan(plan).canCreateDirectAd)return false;
+  }
+  return true;
 }

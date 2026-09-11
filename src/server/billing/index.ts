@@ -7,18 +7,26 @@ import { getStripe } from '@/lib/stripe';
 import { requireBillingMembership } from './auth';
 import { getOneTimePriceId, getPlanDiscountCouponId, getSubscriptionPriceId } from './config';
 import type { BillingPrice, BusinessBillingState, BusinessPricingCatalog, SponsorOrderState } from './types';
-import { capabilitiesForPlan } from '@/lib/business-capabilities';
+import { capabilitiesForPlan, effectivePlanFromAccount } from '@/lib/business-capabilities';
 
 export { capabilitiesForPlan };
 
-const enabledStatuses = new Set(['ACTIVE', 'TRIALING', 'PAST_DUE']);
-
 export async function getBusinessPlan(businessAccountId?: string): Promise<BusinessPlan> {
   const membership = await requireBillingMembership(businessAccountId);
-  if (membership.businessAccount.planOverride) return membership.businessAccount.planOverride;
   const subscription = await prisma.businessSubscription.findUnique({ where: { businessAccountId: membership.businessAccountId } });
-  if (!subscription || !enabledStatuses.has(subscription.status) || subscription.currentPeriodEnd <= new Date()) return 'FREE';
-  return subscription.plan;
+  return effectivePlanFromAccount(membership.businessAccount.planOverride, subscription);
+}
+
+// 公開ページ(/campaigns/[kind]/[id]等、未ログインの一般ユーザーも見る)で「支払い権限を失った
+// Businessの有料コンテンツを露出させない」ために使う専用の入口。requireBillingMembershipは
+// 本人がその店舗の担当者としてログイン済みであることを要求するため、一般ユーザー向けの
+// 公開ページからは呼べない(呼ぶとその場でエラーになる)。
+export async function getPublicBusinessPlan(businessAccountId: string): Promise<BusinessPlan> {
+  const [account, subscription] = await Promise.all([
+    prisma.businessAccount.findUnique({ where: { id: businessAccountId }, select: { planOverride: true } }),
+    prisma.businessSubscription.findUnique({ where: { businessAccountId } }),
+  ]);
+  return effectivePlanFromAccount(account?.planOverride ?? null, subscription);
 }
 
 
@@ -63,7 +71,7 @@ export async function getBusinessBillingState(businessAccountId?: string): Promi
     prisma.businessSubscription.findUnique({ where: { businessAccountId: membership.businessAccountId } }),
     getBusinessSubscriptionPrices(),
   ]);
-  const plan = membership.businessAccount.planOverride ?? (subscription && enabledStatuses.has(subscription.status) && subscription.currentPeriodEnd > new Date() ? subscription.plan : 'FREE');
+  const plan = effectivePlanFromAccount(membership.businessAccount.planOverride, subscription);
   return {
     businessAccountId: membership.businessAccountId,
     plan,

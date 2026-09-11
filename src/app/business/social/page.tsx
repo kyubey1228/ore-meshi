@@ -17,7 +17,7 @@ export default async function BusinessSocial({searchParams}:{searchParams:Promis
   const query=await searchParams;const data=await getBusinessDashboard();
   const kind=kinds.has(query.kind as CampaignKind)?query.kind as CampaignKind:null;
   const campaign=kind&&query.id?await getCampaignShareData(kind,query.id):null;
-  const allowed=campaign?.businessAccountId===data.membership.businessAccountId&&campaignIsShareable(campaign);
+  const allowed=Boolean(campaign?.businessAccountId===data.membership.businessAccountId&&await campaignIsShareable(campaign));
   const counts=Object.fromEntries(data.analytics.map(row=>[row.eventType,row._count._all]));
   return <section className="section narrow"><Link className="text-link" href="/business/dashboard">← Business Dashboard</Link><h1>Xで飯を呼ぶ</h1>
     <div className="panel"><h2>X連携状態</h2>{data.socialAccounts.length?data.socialAccounts.map(account=><p key={account.id}>@{account.username} · {account.status}</p>):<p className="muted">未連携です。手動シェアはX連携なしで利用できます。</p>}<h3>将来の自動投稿</h3><p className="muted">すべて初期OFFです。X API連携後も、店舗が明示的に有効化するまで投稿されません。</p><div className="tag-pills">{['スポンサー飯','空席','キャンセル枠','残り1席'].map(label=><span className="tag-pill" key={label}>{label}：OFF</span>)}</div></div>

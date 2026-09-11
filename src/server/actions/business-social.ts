@@ -11,6 +11,6 @@ export async function recordManualSocialShare(input:unknown){return perform(asyn
   await businessPostingMembership(data.businessAccountId);
   const campaign=await getCampaignShareData(data.entityType,data.entityId);
   ensure(campaign?.businessAccountId===data.businessAccountId,'投稿対象が見つかりません。');
-  ensure(campaignIsShareable(campaign),'終了または非公開のキャンペーンは共有できません。');
+  ensure(await campaignIsShareable(campaign),'終了または非公開のキャンペーンは共有できません。');
   await prisma.socialPost.upsert({where:{idempotencyKey:`manual:${data.businessAccountId}:${data.eventId}`},create:{businessAccountId:data.businessAccountId,entityType:data.entityType,entityId:data.entityId,postType:data.postType,status:'PENDING',shareMode:'MANUAL',idempotencyKey:`manual:${data.businessAccountId}:${data.eventId}`},update:{}});
 });}

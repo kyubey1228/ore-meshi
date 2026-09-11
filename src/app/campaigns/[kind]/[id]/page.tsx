@@ -19,7 +19,7 @@ export async function generateMetadata({params}:Props):Promise<Metadata>{
 export default async function CampaignPage({params,searchParams}:Props){
   const [{kind:slug,id},query]=await Promise.all([params,searchParams]);
   const kind=kinds[slug];const data=kind?await getCampaignShareData(kind,id):null;if(!data)notFound();
-  const active=campaignIsShareable(data);
+  const active=await campaignIsShareable(data);
   return <section className="section narrow">
     <ReferralTracker kind={data.kind} id={data.id} utmSource={query.utm_source} utmMedium={query.utm_medium} utmCampaign={query.utm_campaign} referralKey={query.ref}/>
     <div className="panel campaign-public"><span className="tag">PR · 提供</span><h1>{data.title}</h1><h2>{data.restaurantName}</h2><p>{data.area}</p>{data.benefit&&<p className="campaign-benefit">{data.benefit}</p>}{typeof data.remaining==='number'&&<p className="last-slot-label">あと{data.remaining}{data.kind==='SEAT_CAMPAIGN'?'席':'人'}</p>}<p className={active?'success':'notice'}>{active?'このキャンペーンは実施中です。':'このキャンペーンは終了しました。'}</p></div>
