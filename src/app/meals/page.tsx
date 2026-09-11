@@ -45,17 +45,21 @@ export default async function Meals({searchParams}:{searchParams:Promise<Record<
   const raw=await searchParams;
   const parsed=filterSchema.safeParse(raw);
   const filters=parsed.success?parsed.data:{};
-  const userId=await currentUserId();
-  // preferences/recommendationProfileはgetMealListのランキングに必要だが、purposes/sponsoredMeals/seatCampaignsは
-  // それらと無関係なので同じ待ち行列に入れて1段目から並行取得する(以前は2段階のwaterfallになっていた)。
-  const [preferences,recommendationProfile,purposes,sponsoredMeals,seatCampaigns,areaOptionsGrouped]=await Promise.all([
-    userId?getUserPreferences(userId):Promise.resolve(null),
-    userId?getRecommendationTopPicks(userId):Promise.resolve(null),
+  // 公開データは認証結果に依存しない。Authの完了を待つwaterfallを作らず同時にDB/cache取得を開始する。
+  const userIdPromise=currentUserId();
+  const publicDataPromise=Promise.all([
     getMealPurposes(),
     getActiveStandaloneSponsoredMeals(filters.area),
     getActiveSeatCampaigns(filters.area),
     getAreaOptionsGrouped(),
   ]);
+  const userId=await userIdPromise;
+  const [personalized,publicData]=await Promise.all([
+    Promise.all([userId?getUserPreferences(userId):Promise.resolve(null),userId?getRecommendationTopPicks(userId):Promise.resolve(null)]),
+    publicDataPromise,
+  ]);
+  const [preferences,recommendationProfile]=personalized;
+  const [purposes,sponsoredMeals,seatCampaigns,areaOptionsGrouped]=publicData;
   const context={preferredArea:preferences?.preferredArea,preferredGenres:preferences?.preferredGenres,recommendationProfile};
   const meals=await getMealList(filters,context);
   const recentMeals=meals.length?[]:await getRecentOpenMeals(4);

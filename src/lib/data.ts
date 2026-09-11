@@ -8,6 +8,7 @@ import type { Prisma } from '@prisma/client';
 import { rankMeals, type RankingContext } from '@/lib/meal-ranking';
 export const publicUser = { id:true, twitterUsername:true, displayName:true, image:true, bio:true, createdAt:true,diningTypes:{where:{diningType:{isActive:true}},orderBy:{diningType:{sortOrder:'asc'}},select:{diningType:{select:{id:true,slug:true,label:true}}}} } satisfies Prisma.UserSelect;
 export async function getCurrentUser(){const id=await currentUserId();return id?prisma.user.findUnique({where:{id},select:publicUser}):null;}
+export async function getCurrentUserForProfile(userId:string){return prisma.user.findUnique({where:{id:userId},select:{...publicUser,email:true}});}
 // 飯タイプ/目的タグは管理画面がなく、実質デプロイ時にしか変わらない参照データ。
 // idは実在のDB行(MealPurpose/DiningType)を指し、募集作成・プロフィール編集で本物のIDかDB側検証を通すため、
 // 値を静的にハードコードすることはできない(検証が必ず通るとは限らずデータ不整合の原因になる)。

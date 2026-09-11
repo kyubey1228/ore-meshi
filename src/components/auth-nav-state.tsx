@@ -4,12 +4,17 @@ import { usePathname } from 'next/navigation';
 import { Bell, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-let sessionRequest: Promise<unknown> | undefined;
-function loadSession() { return sessionRequest ??= fetch('/api/auth/session').then(response => response.json()); }
+type AccountState = { signedIn: boolean; count: number };
+let accountStateRequest: Promise<AccountState> | undefined;
+function loadAccountState() {
+  return accountStateRequest ??= fetch('/api/notifications/unread', { cache: 'no-store' })
+    .then(response => response.ok ? response.json() as Promise<AccountState> : { signedIn: false, count: 0 })
+    .catch(error => { accountStateRequest = undefined; throw error; });
+}
 
 function useSessionState() {
   const [state, setState] = useState<{ signedIn: boolean; unread: number } | null>(null);
-  useEffect(() => { void Promise.all([loadSession(), fetch('/api/notifications/unread').then(r => r.ok ? r.json() : { count: 0 })]).then(([session, unread]) => setState({ signedIn: Boolean((session as {user?:unknown})?.user), unread: unread.count ?? 0 })).catch(() => setState({ signedIn: false, unread: 0 })); }, []);
+  useEffect(() => { void loadAccountState().then(result => setState({ signedIn: result.signedIn, unread: result.count ?? 0 })).catch(() => setState({ signedIn: false, unread: 0 })); }, []);
   return state;
 }
 

@@ -17,6 +17,11 @@ export async function getBusinessPlan(businessAccountId?: string): Promise<Busin
   return effectivePlanFromAccount(membership.businessAccount.planOverride, subscription);
 }
 
+export async function getBusinessPlanForMembership(membership: { businessAccountId: string; businessAccount: { planOverride: BusinessPlan | null } }): Promise<BusinessPlan> {
+  const subscription = await prisma.businessSubscription.findUnique({ where: { businessAccountId: membership.businessAccountId } });
+  return effectivePlanFromAccount(membership.businessAccount.planOverride, subscription);
+}
+
 // 公開ページ(/campaigns/[kind]/[id]等、未ログインの一般ユーザーも見る)で「支払い権限を失った
 // Businessの有料コンテンツを露出させない」ために使う専用の入口。requireBillingMembershipは
 // 本人がその店舗の担当者としてログイン済みであることを要求するため、一般ユーザー向けの

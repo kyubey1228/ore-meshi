@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentBusinessMembership, getBusinessActivationFunnel, getBusinessCompletionStats, getBusinessDashboard, getBusinessMonthlyStats } from '@/server/business';
-import { getBusinessPlan, getBusinessPricingCatalog } from '@/server/billing';
+import { getBusinessPlanForMembership, getBusinessPricingCatalog } from '@/server/billing';
 import { BusinessPaymentBanner } from '@/components/business-payment-banner';
 import { BusinessStatusBadge } from '@/components/business-status-badge';
 import type { BusinessCampaignStatus } from '@/features/business/campaign-status';
@@ -31,8 +31,8 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
   if (membership.businessAccount.status === 'SUSPENDED') return <section className="section narrow"><h1>店舗管理を一時停止しています。</h1><p className="notice">詳しくは運営へお問い合わせください。</p><Link className="btn" href="/business/contact">問い合わせる</Link></section>;
   const query = await searchParams;
   const [data, plan, monthly, completion, catalog, funnel] = await measurePerformance('BUSINESS', 'dashboard aggregates', () => Promise.all([
-    getBusinessDashboard(),
-    getBusinessPlan(membership.businessAccountId),
+    getBusinessDashboard(membership),
+    getBusinessPlanForMembership(membership),
     getBusinessMonthlyStats(membership.businessAccountId),
     getBusinessCompletionStats(membership.businessAccountId),
     getBusinessPricingCatalog(),

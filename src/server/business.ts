@@ -20,8 +20,10 @@ export async function currentBusinessMembership(){
 export async function getBusinessTeam(businessAccountId:string){
   return prisma.businessMember.findMany({where:{businessAccountId},orderBy:{createdAt:'asc'},include:{user:{select:{displayName:true,twitterUsername:true,image:true}}}});
 }
-export async function getBusinessDashboard(){
-  const membership=await businessPostingMembership();const id=membership.businessAccountId;const now=new Date();
+type DashboardMembership = NonNullable<Awaited<ReturnType<typeof currentBusinessMembership>>>;
+export async function getBusinessDashboard(verifiedMembership?: DashboardMembership){
+  // ページで既に取得・検証したmembershipを再利用し、同じBusinessMemberを再検索しない。
+  const membership=verifiedMembership??await businessPostingMembership();const id=membership.businessAccountId;const now=new Date();
   const [sponsoredMeals,sponsorCampaigns,seatCampaigns,coupons,directAds,socialAccounts,settings,recentPosts,analytics]=await Promise.all([
     prisma.sponsoredMeal.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
     prisma.sponsorCampaign.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
