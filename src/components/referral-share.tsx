@@ -47,7 +47,7 @@ export function ReferralShare({ inviteUrl, text, mealId, heading = '友達も誘
     <div className="panel">
       <h2>{heading}</h2>
       <p className="muted">{description}</p>
-      <UgcStylePicker value={ugcStyle} onChange={setUgcStyle} previewTitle={mealId ? 'この飯、一緒にいかない？' : heading} previewDetail={description} />
+      <UgcStylePicker value={ugcStyle} onChange={setUgcStyle} previewUrl={previewUrl} />
       <div className="share-actions">
         <a className="btn dark-btn" href={`https://x.com/intent/tweet?${new URLSearchParams({ text: styledText }).toString()}`} target="_blank" rel="noopener noreferrer" onClick={() => share('x')}>Xで誘う</a>
         <a className="btn line-btn" href={`https://line.me/R/msg/text/?${encodeURIComponent(styledText)}`} target="_blank" rel="noopener noreferrer" onClick={() => share('line')}>LINEで誘う</a>
