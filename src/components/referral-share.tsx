@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { trackGrowthEvent } from '@/components/growth-tracker';
 import { UgcStylePicker } from '@/components/ugc-style-picker';
 import { initialUgcStyle, withUgcStyle } from '@/lib/ugc';
+import { lineShareUrl } from '@/lib/social';
 
 type Props = { inviteUrl: string; text: string; mealId?: string; heading?: string; description?: string };
 
@@ -50,7 +51,7 @@ export function ReferralShare({ inviteUrl, text, mealId, heading = '友達も誘
       <UgcStylePicker value={ugcStyle} onChange={setUgcStyle} previewUrl={previewUrl} />
       <div className="share-actions">
         <a className="btn dark-btn" href={`https://x.com/intent/tweet?${new URLSearchParams({ text: styledText }).toString()}`} target="_blank" rel="noopener noreferrer" onClick={() => share('x')}>Xで誘う</a>
-        <a className="btn line-btn" href={`https://line.me/R/msg/text/?${encodeURIComponent(styledText)}`} target="_blank" rel="noopener noreferrer" onClick={() => share('line')}>LINEで誘う</a>
+        <a className="btn line-btn" href={lineShareUrl(styledInviteUrl, styledText)} target="_blank" rel="noopener noreferrer" onClick={() => share('line')}>LINEで誘う</a>
         <button className="btn secondary" type="button" onClick={copyUrl}>{copied ? 'コピーしました！' : '招待URLをコピー'}</button>
         {canShare && <button className="btn secondary" type="button" onClick={webShare}>共有する</button>}
         <a className="btn secondary" href={`${previewUrl}&download=1`} download>画像を保存</a>

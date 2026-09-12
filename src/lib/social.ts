@@ -42,6 +42,11 @@ export function shareTextForViewer(text:string,viewerIsHost:boolean,hostDisplayN
 
 export function xIntent(text:string){return `https://x.com/intent/tweet?${new URLSearchParams({text}).toString()}`;}
 
+// line.me/R/msg/text/はLINEアプリ内ブラウザから開く前提の非公式な形式で、通常のブラウザ(PC・
+// スマホのSafari/Chrome等)から開くとLINE側でエラー/白画面になる。社サイトからのシェア用に
+// LINEが公式に案内しているsocial-plugins.line.me/lineit/shareを使う。
+export function lineShareUrl(url:string,text:string){return `https://social-plugins.line.me/lineit/share?${new URLSearchParams({url,text}).toString()}`;}
+
 // 共有チャンネルごとにutm_source/mediumを付けたURLを発行する。着地先ページは既にGrowthTrackerを
 // mountしておりUTMをCookie化して以降のsignup計測まで引き継ぐため、新しいAttribution基盤を作らず
 // ここでURLを作るだけで既存の計測に乗る(meal-share-actions.tsx等から利用)。

@@ -2,7 +2,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { Copy, Share2 } from 'lucide-react';
 import { trackGrowthEvent } from '@/components/growth-tracker';
-import { withUtm } from '@/lib/social';
+import { lineShareUrl, withUtm } from '@/lib/social';
 import { UgcStylePicker } from '@/components/ugc-style-picker';
 import { initialUgcStyle, withUgcStyle } from '@/lib/ugc';
 
@@ -63,7 +63,7 @@ export function MealShareActions({ mealId, area, genre, text, url }: Props) {
         <a className="btn dark-btn" href={`https://x.com/intent/tweet?${new URLSearchParams({ text: xText }).toString()}`} target="_blank" rel="noopener noreferrer" onClick={() => share('x')}>
           <Share2 size={17} />Xで共有
         </a>
-        <a className="btn line-btn" href={`https://line.me/R/msg/text/?${encodeURIComponent(lineText)}`} target="_blank" rel="noopener noreferrer" onClick={() => share('line')}>
+        <a className="btn line-btn" href={lineShareUrl(lineUrl, lineText)} target="_blank" rel="noopener noreferrer" onClick={() => share('line')}>
           LINEで送る
         </a>
         <button className="btn secondary" type="button" onClick={copyUrl}>
