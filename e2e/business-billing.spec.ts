@@ -9,11 +9,15 @@ import { postWebhook, signPayload } from './billing-webhook-helpers';
 // このファイルは playwright.billing.config.ts でのみ実行される(npm run test:e2e:billing)。
 // globalSetup (billing-global-setup.ts) が既にStripeキーのtest mode検証・DB分離検証を済ませている。
 // ここでも二重に検証する(このファイルだけ直接実行された場合の保険)。
-assertStripeTestMode(process.env.STRIPE_SECRET_KEY, 'business-billing.spec.ts (webServer env)');
+// 注意: このファイルはPlaywrightのテストランナープロセス自身で実行され、webServer.envで
+// E2E_STRIPE_*→STRIPE_*にマッピングされた環境変数が渡されるのは spawn される next dev の
+// 子プロセスだけ。テストランナー側では素の STRIPE_SECRET_KEY / DATABASE_URL は通常の開発用
+// (本番)の値になっているため、必ず E2E_ プレフィックス付きの変数を直接参照すること。
+assertStripeTestMode(process.env.E2E_STRIPE_SECRET_KEY, 'business-billing.spec.ts');
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
-const prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
+const stripe = new Stripe(process.env.E2E_STRIPE_SECRET_KEY!);
+const webhookSecret = process.env.E2E_STRIPE_WEBHOOK_SECRET!;
+const prisma = new PrismaClient({ datasources: { db: { url: process.env.E2E_DATABASE_URL } } });
 
 async function fixture() {
   const raw = await readFile(billingFixturePath, 'utf-8');
@@ -62,7 +66,7 @@ test.describe.serial('スポンサー飯: Checkout→Webhook→DB→Dashboard→
     expect(session.metadata?.orderType).toBe('SPONSORED_MEAL');
     expect(session.line_items?.data).toHaveLength(1);
     expect(session.line_items?.data[0].quantity).toBe(1);
-    expect(session.line_items?.data[0].price?.id).toBe(process.env.STRIPE_PRICE_SPONSORED_MEAL);
+    expect(session.line_items?.data[0].price?.id).toBe(process.env.E2E_STRIPE_PRICE_SPONSORED_MEAL);
     expect(session.success_url).toContain('checkout=success');
     expect(session.success_url).toContain('order_id=');
     expect(session.cancel_url).toContain('checkout=cancelled');
@@ -71,7 +75,7 @@ test.describe.serial('スポンサー飯: Checkout→Webhook→DB→Dashboard→
     expect(order?.status).toBe('PENDING_PAYMENT');
     expect(order?.stripeCheckoutSessionId).toBe(sessionId);
     // 表示価格(Stripe Price)とCheckout時に実際に使われたPriceが一致していること。
-    const catalogPrice = await stripe.prices.retrieve(process.env.STRIPE_PRICE_SPONSORED_MEAL!);
+    const catalogPrice = await stripe.prices.retrieve(process.env.E2E_STRIPE_PRICE_SPONSORED_MEAL!);
     expect(session.line_items?.data[0].price?.unit_amount).toBe(catalogPrice.unit_amount);
   });
 
@@ -81,14 +85,19 @@ test.describe.serial('スポンサー飯: Checkout→Webhook→DB→Dashboard→
   // Stripeのマークアップ変更でセレクタがずれていたら実際のページを見て調整すること。
   test('Stripe Test Mode Checkoutでテストカードにより支払いを完了する', async ({ page }) => {
     await page.goto(checkoutUrl);
+    // 現行のStripe Hosted Checkoutはカード情報の入力欄をiframeではなくページ本体の<input>として描画する
+    // (iframeが使われるのはApple Pay/Google Pay/Link用の"Secure express checkout frame"のみ)。
+    // page.goto直後はStripe側のReactアプリがまだハイドレーション中で、Emailなど他の項目を
+    // count()で存在チェックすると間に合わずfalseになり未入力のまま送信されてしまうことがあるため、
+    // 先にカード情報を入力してページの初期描画が落ち着くのを待ってからチェックする。
+    await page.locator('input[name="cardNumber"]').fill('4242424242424242');
+    await page.locator('input[name="cardExpiry"]').fill('12/34');
+    await page.locator('input[name="cardCvc"]').fill('123');
     const emailField = page.getByLabel('Email');
     if (await emailField.count()) await emailField.fill('e2e-billing@example.test');
-    const cardFrame = page.frameLocator('iframe[title="Secure card number input frame"]');
-    await cardFrame.locator('input[name="cardnumber"]').fill('4242424242424242');
-    await page.frameLocator('iframe[title="Secure expiration date input frame"]').locator('input[name="exp-date"]').fill('12/34');
-    await page.frameLocator('iframe[title="Secure CVC input frame"]').locator('input[name="cvc"]').fill('123');
-    const nameField = page.getByLabel('Cardholder name');
-    if (await nameField.count()) await nameField.fill('E2E Test');
+    // Cardholder nameは必須項目。count()での存在チェックだと、カード入力直後の非同期な再描画中に
+    // 判定が走って未入力のまま送信されることがあるため、常に入力する。
+    await page.getByLabel('Cardholder name').fill('E2E Test');
     await page.getByTestId('hosted-payment-submit-button').click();
     await page.waitForURL(url => url.href.includes('checkout=success'), { timeout: 30_000 });
   });
@@ -181,12 +190,15 @@ test.describe.serial('Subscription: Checkout→Webhook→entitlement→失効時
     expect(session.mode).toBe('subscription');
     expect(session.livemode).toBe(false);
 
-    const cardFrame = page.frameLocator('iframe[title="Secure card number input frame"]');
-    await cardFrame.locator('input[name="cardnumber"]').fill('4242424242424242');
-    await page.frameLocator('iframe[title="Secure expiration date input frame"]').locator('input[name="exp-date"]').fill('12/34');
-    await page.frameLocator('iframe[title="Secure CVC input frame"]').locator('input[name="cvc"]').fill('123');
+    // 現行のStripe Hosted Checkoutはカード情報の入力欄をiframeではなくページ本体の<input>として描画する
+    // (iframeが使われるのはApple Pay/Google Pay/Link用の"Secure express checkout frame"のみ)。
+    await page.locator('input[name="cardNumber"]').fill('4242424242424242');
+    await page.locator('input[name="cardExpiry"]').fill('12/34');
+    await page.locator('input[name="cardCvc"]').fill('123');
     const emailField = page.getByLabel('Email');
     if (await emailField.count()) await emailField.fill('e2e-billing@example.test');
+    // Cardholder nameは必須項目。
+    await page.getByLabel('Cardholder name').fill('E2E Test');
     await page.getByTestId('hosted-payment-submit-button').click();
     await page.waitForURL(url => url.href.includes('subscription=success'), { timeout: 30_000 });
   });
@@ -209,7 +221,7 @@ test.describe.serial('Subscription: Checkout→Webhook→entitlement→失効時
     // (Checkout導線はSTANDARD/PROどちらも同一コードパスのため、既に上のテストで実証済み)。
     const subscription = await prisma.businessSubscription.findUnique({ where: { businessAccountId } });
     const stripeSubscription = await stripe.subscriptions.retrieve(subscription!.stripeSubscriptionId);
-    await stripe.subscriptions.update(stripeSubscription.id, { items: [{ id: stripeSubscription.items.data[0].id, price: process.env.STRIPE_PRICE_BUSINESS_PRO! }], proration_behavior: 'none' });
+    await stripe.subscriptions.update(stripeSubscription.id, { items: [{ id: stripeSubscription.items.data[0].id, price: process.env.E2E_STRIPE_PRICE_BUSINESS_PRO! }], proration_behavior: 'none' });
     const updated = await stripe.subscriptions.retrieve(stripeSubscription.id);
     const events = await stripe.events.list({ type: 'customer.subscription.updated', limit: 5 });
     const event = events.data.find(e => (e.data.object as Stripe.Subscription).id === updated.id)!;

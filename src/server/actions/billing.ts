@@ -111,7 +111,10 @@ export async function createBusinessSubscriptionCheckout(planInput: unknown): Pr
       metadata,
       subscription_data: { metadata },
       ...(offer?.stripePromotionCodeId?{discounts:[{promotion_code:offer.stripePromotionCodeId}]}:{}),
-    }, { idempotencyKey: `subscription-checkout:${membership.businessAccountId}:${plan}:${priceId}` });
+    // sessionKeyを含めることで、同一セッション内の二重送信は引き続き同じキーで重複排除しつつ、
+    // セッションが変わった別の申し込み(再実行・再契約等)がmetadataの異なる過去のキーと衝突して
+    // StripeIdempotencyError(パラメータ不一致)になるのを避ける。
+    }, { idempotencyKey: `subscription-checkout:${membership.businessAccountId}:${plan}:${priceId}:${sessionKey}` });
     ensure(session.url, 'Stripe Checkout URLを取得できませんでした。');
     await prisma.businessMarketingEvent.create({data:{sessionKey,businessAccountId:membership.businessAccountId,eventType:'CHECKOUT_STARTED'}});
     return session.url;
