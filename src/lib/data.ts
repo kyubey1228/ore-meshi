@@ -87,13 +87,13 @@ async function fetchOpenMeals(filters: MealListFilters, limit: number) {
   const where: Prisma.MealWhereInput={status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}],...(filters.area?{area:{contains:filters.area,mode:'insensitive'}}:{}),...(filters.paymentType?{paymentType:filters.paymentType}:{}),...(typeof filters.budget==='number'?{budgetMax:{lte:filters.budget}}:{}),...(filters.date?{candidates:{some:{date:new Date(filters.date)}}}:{}),...(filters.purpose?{purposes:{some:{purpose:{slug:filters.purpose,isActive:true}}}}:{}),...whenWhere(filters.when)};
   // sponsoredMeals.businessAccountのネスト取得はMealごとに個別queryを発行せず1回のfindManyにバッチされる
   // (Prismaのrelation loadingで、行ごとのN+1にはならない)。Boostランキングにプラン情報が必要なため取得する。
-  return prisma.meal.findMany({where,orderBy:{createdAt:'desc'},take:limit,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true,businessAccount:{select:{planOverride:true,subscription:{select:{plan:true,status:true,currentPeriodEnd:true}}}}}}}});
+  return prisma.meal.findMany({where,orderBy:{createdAt:'desc'},take:limit,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}],...(filters.when==='soon'?{}:{take:1})},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{candidates:true,joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true,businessAccount:{select:{planOverride:true,subscription:{select:{plan:true,status:true,currentPeriodEnd:true}}}}}}}});
 }
 // DB接続経路のレイテンシが大きいため(1往復で数百ms〜規模)、一覧の取得自体を短時間キャッシュし、
 // 誰が見ても同じ結果になるDB取得部分と、閲覧者ごとに変わる並び替え(rankMeals)を分離する。
-const cachedFetchOpenMeals = unstable_cache(fetchOpenMeals, ['open-meals'], { revalidate: 20 });
+const cachedFetchOpenMeals = unstable_cache(fetchOpenMeals, ['open-meals'], { revalidate: 60 });
 
-export async function getMealList(input: unknown = {}, context: RankingContext = {}, limit = 100) {
+export async function getMealCandidates(input: unknown = {}, limit = 40) {
   const parsed=filterSchema.safeParse(input); const filters=parsed.success?parsed.data:{};
   if(!process.env.DATABASE_URL) return [];
   let meals;
@@ -101,11 +101,18 @@ export async function getMealList(input: unknown = {}, context: RankingContext =
   const now=new Date();
   const soonFiltered=filters.when==='soon'?meals.filter(meal=>withinHours(meal,3,now)):meals;
   const remainingFiltered=filters.remaining?soonFiltered.filter(meal=>meal.maxParticipants-(meal._count.joinRequests+1)===filters.remaining):soonFiltered;
-  return rankMeals(remainingFiltered,{...context,now}).map(r=>r.meal);
+  return remainingFiltered;
+}
+export async function getRankedMealList(input: unknown = {}, context: RankingContext = {}, limit = 40) {
+  const meals=await getMealCandidates(input,limit);
+  return rankMeals(meals,{...context,now:new Date()});
+}
+export async function getMealList(input: unknown = {}, context: RankingContext = {}, limit = 40) {
+  return (await getRankedMealList(input,context,limit)).map(result=>result.meal);
 }
 const cachedRecentOpenMeals = unstable_cache(
-  (limit: number) => prisma.meal.findMany({where:{status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}]},orderBy:{createdAt:'desc'},take:limit,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}}),
-  ['recent-open-meals'], { revalidate: 20 },
+  (limit: number) => prisma.meal.findMany({where:{status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}]},orderBy:{createdAt:'desc'},take:limit,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}],take:1},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{candidates:true,joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}}),
+  ['recent-open-meals'], { revalidate: 60 },
 );
 export async function getRecentOpenMeals(limit=4){
   if(!process.env.DATABASE_URL) return [];
@@ -115,7 +122,7 @@ export async function getMealsByIds(ids: string[]){
   if(!process.env.DATABASE_URL || ids.length===0) return [];
   const safeIds=ids.filter(id=>idSchema.safeParse(id).success).slice(0,20);
   if(!safeIds.length) return [];
-  const meals=await prisma.meal.findMany({where:{id:{in:safeIds},status:'OPEN'},include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
+  const meals=await prisma.meal.findMany({where:{id:{in:safeIds},status:'OPEN'},include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}],take:1},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{candidates:true,joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
   const order=new Map(safeIds.map((id,index)=>[id,index]));
   return meals.sort((a,b)=>(order.get(a.id)??0)-(order.get(b.id)??0));
 }
@@ -176,10 +183,10 @@ export async function getMealShareData(raw:string){
   const id=idSchema.safeParse(raw);if(!id.success||!process.env.DATABASE_URL)return null;
   return prisma.meal.findUnique({where:{id:id.data},select:{id:true,title:true,description:true,area:true,budgetMin:true,budgetMax:true,paymentType:true,maxParticipants:true,status:true,host:{select:{displayName:true,twitterUsername:true,image:true}},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}],take:1,select:{date:true,startTime:true,endTime:true}},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}});
 }
-// 残席/残枠はある程度リアルタイム性が必要なため短いTTL(10秒)に留める。
+// 残席/残枠はある程度リアルタイム性が必要なため短いTTL(30秒)に留める。
 const cachedActiveStandaloneSponsoredMeals = unstable_cache(
   (area: string) => prisma.sponsoredMeal.findMany({where:{status:'ACTIVE',mealId:null,startsAt:{gt:new Date()},...(area?{area:{contains:area,mode:'insensitive'}}:{})},orderBy:{startsAt:'asc'},take:12,select:{id:true,title:true,sponsorName:true,restaurantName:true,area:true,startsAt:true,remainingSlots:true,benefit:true}}),
-  ['active-sponsored-meals'], { revalidate: 10 },
+  ['active-sponsored-meals'], { revalidate: 30 },
 );
 export async function getActiveStandaloneSponsoredMeals(area?: string){
   if(!process.env.DATABASE_URL) return [];
@@ -187,7 +194,7 @@ export async function getActiveStandaloneSponsoredMeals(area?: string){
 }
 const cachedActiveSeatCampaigns = unstable_cache(
   (area: string) => prisma.seatCampaign.findMany({where:{status:'ACTIVE',endsAt:{gt:new Date()},...(area?{area:{contains:area,mode:'insensitive'}}:{})},orderBy:{endsAt:'asc'},take:12,select:{id:true,restaurantName:true,area:true,remainingSeats:true,endsAt:true,benefit:true}}),
-  ['active-seat-campaigns'], { revalidate: 10 },
+  ['active-seat-campaigns'], { revalidate: 30 },
 );
 export async function getActiveSeatCampaigns(area?: string){
   if(!process.env.DATABASE_URL) return [];

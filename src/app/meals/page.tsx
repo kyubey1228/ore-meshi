@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { getActiveSeatCampaigns, getActiveStandaloneSponsoredMeals, getAreaOptionsGrouped, getMealList, getMealPurposes, getRecentOpenMeals, getUserPreferences } from '@/lib/data';
+import { Suspense } from 'react';
+import { getActiveSeatCampaigns, getActiveStandaloneSponsoredMeals, getAreaOptionsGrouped, getMealCandidates, getMealPurposes, getRecentOpenMeals } from '@/lib/data';
 import { AreaSearchField } from '@/components/area-search-field';
 import { currentUserId } from '@/server/auth';
 import { filterSchema } from '@/validators';
 import { paymentLabels } from '@/lib/format';
 import { rankMeals } from '@/lib/meal-ranking';
-import { getRecommendationTopPicks } from '@/server/recommendation-profile';
+import { getMealPersonalization } from '@/server/recommendation-profile';
 import { MealCard } from '@/components/meal-card';
 import { SponsoredMealBanner } from '@/components/sponsored-meal-banner';
 import { SeatCampaignBanner } from '@/components/seat-campaign-banner';
@@ -41,8 +42,7 @@ function quickFilterHref(raw: Record<string,string|string[]|undefined>, key: 'wh
   return `/meals${params.toString()?`?${params.toString()}`:''}`;
 }
 
-export default async function Meals({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
-  const raw=await searchParams;
+async function MealsContent({raw}:{raw:Record<string,string|string[]|undefined>}){
   const parsed=filterSchema.safeParse(raw);
   const filters=parsed.success?parsed.data:{};
   // 公開データは認証結果に依存しない。Authの完了を待つwaterfallを作らず同時にDB/cache取得を開始する。
@@ -53,28 +53,28 @@ export default async function Meals({searchParams}:{searchParams:Promise<Record<
     getActiveSeatCampaigns(filters.area),
     getAreaOptionsGrouped(),
   ]);
+  const mealCandidatesPromise=getMealCandidates(filters,40);
   const userId=await userIdPromise;
-  const [personalized,publicData]=await Promise.all([
-    Promise.all([userId?getUserPreferences(userId):Promise.resolve(null),userId?getRecommendationTopPicks(userId):Promise.resolve(null)]),
+  const [personalized,publicData,mealCandidates]=await Promise.all([
+    userId?getMealPersonalization(userId):Promise.resolve({preferences:{preferredArea:null,preferredGenres:[] as string[]},recommendationProfile:null}),
     publicDataPromise,
+    mealCandidatesPromise,
   ]);
-  const [preferences,recommendationProfile]=personalized;
+  const {preferences,recommendationProfile}=personalized;
   const [purposes,sponsoredMeals,seatCampaigns,areaOptionsGrouped]=publicData;
   const context={preferredArea:preferences?.preferredArea,preferredGenres:preferences?.preferredGenres,recommendationProfile};
-  const meals=await getMealList(filters,context);
-  const recentMeals=meals.length?[]:await getRecentOpenMeals(4);
-  const emptyData=meals.length?null:await getEmptyStateData(filters.area);
+  const ranked=rankMeals(mealCandidates,{...context,now:new Date()});
+  const meals=ranked.map(result=>result.meal);
+  const [recentMeals,emptyData]=meals.length
+    ? [[],null]
+    : await Promise.all([getRecentOpenMeals(4),getEmptyStateData(filters.area)]);
   const emptyVariant=getVariant('meal_empty_state',userId??filters.area??'anonymous',EMPTY_STATE_VARIANTS);
   const emptyCopy=emptyData?buildEmptyState({...emptyData,area:filters.area,variant:emptyVariant}):null;
   const createHref=userId?'/meals/new':`/login?next=${encodeURIComponent('/meals/new')}`;
   const personalizationEnabled=Boolean(preferences?.preferredArea||preferences?.preferredGenres.length);
-  const rankedItems=rankMeals(meals,{...context,now:new Date()}).map(r=>({meal:r.meal,reason:r.reason}));
+  const rankedItems=ranked.map(result=>({meal:result.meal,reason:result.reason}));
 
-  return <section className="section">
-    <div className="section-heading">
-      <div><span className="eyebrow orange">FIND YOUR NEXT MEAL</span><h1>誰かの飯に乗っかる。</h1><p className="muted">今日の「うまい」を、一緒に。</p></div>
-      <div className="row wrap"><Link className="text-link" href="/demand">募集が無くても行きたい登録する →</Link><Link className="text-link" href="/coupons">クーポンを見る →</Link><TrackedLink className="btn secondary" eventType="RECRUITMENT_CREATE_CLICKED" payload={{area:filters.area,loggedIn:Boolean(userId)}} href={createHref}>飯相手を募集する</TrackedLink></div>
-    </div>
+  return <>
     {!userId&&<GrowthTracker eventType="SIGNUP_CTA_VIEW" source="meals_list_create_cta" loggedIn={false}/>}
     <GrowthTracker eventType="QUICK_FILTER_VIEW" loggedIn={Boolean(userId)}/>
     <RecentlyViewedSection loggedIn={Boolean(userId)}/>
@@ -107,5 +107,18 @@ export default async function Meals({searchParams}:{searchParams:Promise<Record<
     )}
     {recentMeals.length>0&&<div className="section-heading"><h2>新着の募集</h2></div>}
     {recentMeals.length>0&&<div className="meal-grid">{recentMeals.map(meal=><MealCard key={meal.id} meal={meal}/>)}</div>}
+  </>;
+}
+
+function MealsLoading(){return <div className="panel" role="status"><p className="muted">🍚 募集を読み込んでいます…</p></div>;}
+
+export default async function Meals({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  const raw=await searchParams;
+  return <section className="section">
+    <div className="section-heading">
+      <div><span className="eyebrow orange">FIND YOUR NEXT MEAL</span><h1>誰かの飯に乗っかる。</h1><p className="muted">今日の「うまい」を、一緒に。</p></div>
+      <div className="row wrap"><Link className="text-link" href="/demand">募集が無くても行きたい登録する →</Link><Link className="text-link" href="/coupons">クーポンを見る →</Link><TrackedLink className="btn secondary" eventType="RECRUITMENT_CREATE_CLICKED" payload={{area:typeof raw.area==='string'?raw.area:undefined}} href="/meals/new">飯相手を募集する</TrackedLink></div>
+    </div>
+    <Suspense fallback={<MealsLoading/>}><MealsContent raw={raw}/></Suspense>
   </section>;
 }

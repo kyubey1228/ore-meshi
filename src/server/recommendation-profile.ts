@@ -52,9 +52,25 @@ export async function updateRecommendationProfile(params: { userId: string; woul
 
 export type RecommendationTopPicks = { genres: string[]; areas: string[] };
 
-export async function getRecommendationTopPicks(userId: string): Promise<RecommendationTopPicks | null> {
-  const profile = await prisma.userRecommendationProfile.findUnique({ where: { userId } });
+function topPicks(profile: { sampleSize: number; genreWeights: unknown; areaWeights: unknown } | null): RecommendationTopPicks | null {
   if (!profile || profile.sampleSize === 0) return null;
   const topKeys = (weights: unknown, n: number) => Object.entries(weights as Record<string, number>).sort((a, b) => b[1] - a[1]).slice(0, n).map(([key]) => key);
   return { genres: topKeys(profile.genreWeights, 3), areas: topKeys(profile.areaWeights, 3) };
+}
+
+export async function getRecommendationTopPicks(userId: string): Promise<RecommendationTopPicks | null> {
+  const profile = await prisma.userRecommendationProfile.findUnique({ where: { userId } });
+  return topPicks(profile);
+}
+
+// 募集一覧に必要なUser設定と推薦プロファイルを1クエリで取得する。
+export async function getMealPersonalization(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { preferredArea: true, preferredGenres: true, recommendationProfile: { select: { sampleSize: true, genreWeights: true, areaWeights: true } } },
+  });
+  return {
+    preferences: { preferredArea: user?.preferredArea ?? null, preferredGenres: user?.preferredGenres ?? [] },
+    recommendationProfile: topPicks(user?.recommendationProfile ?? null),
+  };
 }
