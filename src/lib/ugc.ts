@@ -1,5 +1,5 @@
 export const UGC_STYLES = [
-  { id: 'gag', label: '腹ペコ絶叫', description: '勢いで誰かを呼ぶ王道ギャグ', image: '/ugc/gag-callout.jpg', accent: '#f05a28', restricted: false },
+  { id: 'gag', label: '腹ペコ絶叫', description: '勢いで誰かを呼ぶ王道ギャグ', image: '/ugc/gag-callout-v2.jpg', accent: '#f05a28', restricted: false },
   { id: 'deadpan', label: 'ひとり二杯', description: '空席を見つめるシュール漫画', image: '/ugc/deadpan-wait.jpg', accent: '#176b72', restricted: false },
   { id: 'victory', label: '飯、決まった！', description: '集まった喜びを全力で祝う', image: '/ugc/victory-feast.jpg', accent: '#d94b28', restricted: false },
   { id: 'woman', label: '女子から飯コール', description: '明るい女性主人公の呼びかけ', image: '/ugc/woman-callout.jpg', accent: '#db5275', restricted: false },
