@@ -12,7 +12,7 @@ import { getVariant, JOIN_CTA_COPY } from '@/lib/experiments';
 import { candidateLabel, paymentLabels, yen, mealStatusLabels, requestStatusLabels, dateTimeLabel } from '@/lib/format';
 import { UserAvatar } from '@/components/meal-card';
 import { DiningTypePills, TagPills } from '@/components/tag-pills';
-import { JoinForm, RequestDecision, CancelRequest, MealStatusControls } from '@/components/meal-controls';
+import { JoinForm, JoinRequestsPanel, RequestDecision, CancelRequest, MealStatusControls } from '@/components/meal-controls';
 import { GrowthTracker, TrackedLink } from '@/components/growth-tracker';
 import { MealShareActions } from '@/components/meal-share-actions';
 import { JoinIntentCta } from '@/components/join-intent-cta';
@@ -134,7 +134,7 @@ export default async function MealDetail({params,searchParams}:Props){
 
     {inviteCode&&<ReferralShare inviteUrl={`${appUrl()}/invite/${inviteCode}`} mealId={id} text={`${remaining>0?`あと${remaining}人で集まります！`:''}\n${firstCandidate?`${candidateLabel(firstCandidate)}〜`:''}${meal.area}で${meal.title}\n\n${appUrl()}/invite/${inviteCode}`}/>}
 
-    {host&&<div className="panel">
+    {host&&<JoinRequestsPanel mealId={id}><div className="panel">
       <h2>参加希望が届いてるよ</h2>
       {meal.joinRequests.length===0&&<p className="muted">まだ参加希望はありません。のんびり待とう。</p>}
       {meal.joinRequests.map(request=><article className="request" key={request.id}>
@@ -144,7 +144,7 @@ export default async function MealDetail({params,searchParams}:Props){
       </article>)}
       {meal.status==='OPEN'&&meal.joinRequests.length===0&&<Link className="text-link" href={`/meals/${id}/edit`}>募集を編集する →</Link>}
       {meal.status!=='CANCELLED'&&<><hr/><MealStatusControls id={id}/><p className="muted">募集のキャンセルと、成立済みの飯の予定のキャンセルは別の操作です。</p></>}
-    </div>}
+    </div></JoinRequestsPanel>}
     {!host&&myRequest&&<div className="panel"><h2>{requestStatusLabels[myRequest.status]}</h2><p>{candidateLabel(myRequest.candidate)}</p>{myRequest.status==='PENDING'&&<CancelRequest id={myRequest.id}/>}</div>}
     <div className="panel"><h2>募集している人</h2><DiningTypePills relations={meal.host.diningTypes} limit={5}/><p>{meal.host.bio||'気軽に一緒に飯いこう。'}</p><TrackedLink className="text-link" eventType="HOST_PROFILE_OPENED" payload={{recruitmentId:id}} href={`/users/${meal.host.id}`}>プロフィールを見る →</TrackedLink></div>
   </section>;
