@@ -1,11 +1,11 @@
 export const UGC_STYLES = [
   { id: 'gag', label: '腹ペコ絶叫', description: '勢いで誰かを呼ぶ王道ギャグ', image: '/ugc/gag-callout-v2.jpg', accent: '#f05a28', restricted: false },
-  { id: 'deadpan', label: 'ひとり二杯', description: '空席を見つめるシュール漫画', image: '/ugc/deadpan-wait.jpg', accent: '#176b72', restricted: false },
-  { id: 'victory', label: '飯、決まった！', description: '集まった喜びを全力で祝う', image: '/ugc/victory-feast.jpg', accent: '#d94b28', restricted: false },
-  { id: 'woman', label: '女子から飯コール', description: '明るい女性主人公の呼びかけ', image: '/ugc/woman-callout.jpg', accent: '#db5275', restricted: false },
-  { id: 'mixer', label: '街コン飯', description: 'みんなで盛り上がる街コン風', image: '/ugc/mixer-night.jpg', accent: '#7546b8', restricted: false },
-  { id: 'women-only', label: '女子会・男性参加不可', description: '女性限定の募集にだけ使う', image: '/ugc/women-only.jpg', accent: '#d92f72', restricted: true },
-  { id: 'men-only', label: '漢飯・女性参加不可', description: '男性限定の募集にだけ使う', image: '/ugc/men-only.jpg', accent: '#a3261d', restricted: true },
+  { id: 'deadpan', label: 'ひとり二杯', description: '空席を見つめるシュール漫画', image: '/ugc/deadpan-wait-v2.jpg', accent: '#176b72', restricted: false },
+  { id: 'victory', label: '飯、決まった！', description: '集まった喜びを全力で祝う', image: '/ugc/victory-feast-v2.jpg', accent: '#d94b28', restricted: false },
+  { id: 'woman', label: '女子から飯コール', description: '明るい女性主人公の呼びかけ', image: '/ugc/woman-callout-v2.jpg', accent: '#db5275', restricted: false },
+  { id: 'mixer', label: '街コン飯', description: 'みんなで盛り上がる街コン風', image: '/ugc/mixer-night-v2.jpg', accent: '#7546b8', restricted: false },
+  { id: 'women-only', label: '女子会・男性参加不可', description: '女性限定の募集にだけ使う', image: '/ugc/women-only-v2.jpg', accent: '#d92f72', restricted: true },
+  { id: 'men-only', label: '漢飯・女性参加不可', description: '男性限定の募集にだけ使う', image: '/ugc/men-only-v2.jpg', accent: '#a3261d', restricted: true },
 ] as const;
 
 export type UgcStyle = typeof UGC_STYLES[number]['id'];
