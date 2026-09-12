@@ -23,6 +23,9 @@ export default async function globalSetup() {
     const business = await prisma.businessAccount.upsert({ where: { slug: `${E2E_PREFIX}-business` }, create: { name: 'E2E テスト食堂', slug: `${E2E_PREFIX}-business`, area: '渋谷', status: 'ACTIVE', businessType: 'RESTAURANT', contactName: 'E2E 店長', contactEmail: 'e2e-business@example.test', purposes: ['空席対策'] }, update: { status: 'ACTIVE' } });
     await prisma.businessMember.upsert({ where: { businessAccountId_userId: { businessAccountId: business.id, userId: rows.business.id } }, create: { businessAccountId: business.id, userId: rows.business.id, role: 'OWNER', canPostToSocial: true }, update: { role: 'OWNER', canPostToSocial: true } });
     await prisma.meal.deleteMany({ where: { title: { startsWith: E2E_PREFIX } } });
+    // NotificationはmealIdが単なるString(FKではない)でMealのcascade削除対象外のため、
+    // 上のmeal削除だけでは消えず実行のたびに蓄積し続ける。テスト用ユーザー宛の通知を明示的にリセットする。
+    await prisma.notification.deleteMany({ where: { userId: { in: Object.values(rows).map(row => row.id) } } });
     for (const [title, hostId, maxParticipants] of [[`${E2E_PREFIX}-公開OGP-A`, rows.user1.id, 2], [`${E2E_PREFIX}-公開OGP-B`, rows.user2.id, 3]] as const) {
       await prisma.meal.create({ data: { hostId, title, area: title.endsWith('A') ? '渋谷' : '新宿', genre: title.endsWith('A') ? '焼肉' : 'ラーメン', budgetMin: 1000, budgetMax: 5000, paymentType: 'SPLIT', maxParticipants, candidates: { create: { date: new Date(Date.now() + 86400000), startTime: '19:00', endTime: '21:00' } } } });
     }

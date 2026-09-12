@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { statePath, users } from './fixtures';
+import { E2E_PREFIX, statePath, users } from './fixtures';
 import { createMeal } from './helpers';
 import { db } from './db';
 import { waitForCondition } from './wait';
@@ -7,6 +7,7 @@ import { waitForCondition } from './wait';
 test.describe.serial('Capacity境界・reload後の状態維持・成立通知', () => {
   let mealUrl: string;
   let mealId: string;
+  let mealTitle: string;
   let user3Id: string;
 
   test.beforeAll(async () => {
@@ -16,7 +17,8 @@ test.describe.serial('Capacity境界・reload後の状態維持・成立通知',
   test('募集を作成し、3人が参加希望を送る', async ({ browser }) => {
     const hostContext = await browser.newContext({ storageState: statePath('business') });
     const hostPage = await hostContext.newPage();
-    mealUrl = await createMeal(hostPage, `E2E容量境界飯-${Date.now()}`, 3);
+    mealTitle = `${E2E_PREFIX}-容量境界飯-${Date.now()}`;
+    mealUrl = await createMeal(hostPage, mealTitle, 3);
     mealId = mealUrl.split('/').filter(Boolean).pop()!;
     await hostContext.close();
 
@@ -68,12 +70,14 @@ test.describe.serial('Capacity境界・reload後の状態維持・成立通知',
     const context = await browser.newContext({ storageState: statePath('user1') });
     const page = await context.newPage();
     await page.goto('/notifications');
-    const row = page.locator('.notification-item.unread', { hasText: '飯、決まりました' });
-    await expect(row).toBeVisible();
-    await row.click();
+    // mealTitleだけだとJOIN_REQUEST_ACCEPTED通知(同じ募集に言及する)も一致してしまうため、
+    // MEAL_MATCHED特有の文言と組み合わせて絞り込む。
+    const matchedNotifications = page.locator('.notification-item.unread').filter({ hasText: '一緒に飯を食う人が決まりました' }).filter({ hasText: mealTitle });
+    await expect(matchedNotifications).toBeVisible();
+    await matchedNotifications.click();
     await page.waitForURL(/\/meals\//);
     await page.goto('/notifications');
-    await expect(page.locator('.notification-item.unread', { hasText: '飯、決まりました' })).toHaveCount(0);
+    await expect(page.locator('.notification-item.unread').filter({ hasText: '一緒に飯を食う人が決まりました' }).filter({ hasText: mealTitle })).toHaveCount(0);
     await context.close();
   });
 });
@@ -91,7 +95,7 @@ test.describe.serial('Completed(二重終了防止)とDiningFeedback(重複防�
   test('募集を作成し成立させ、成立日時を過去に書き換える(Completed操作を可能にするため)', async ({ browser }) => {
     const hostContext = await browser.newContext({ storageState: statePath('user1') });
     const hostPage = await hostContext.newPage();
-    const mealUrl = await createMeal(hostPage, `E2E完了検証飯-${Date.now()}`, 2);
+    const mealUrl = await createMeal(hostPage, `${E2E_PREFIX}-完了検証飯-${Date.now()}`, 2);
     const mealId = mealUrl.split('/').filter(Boolean).pop()!;
     await hostContext.close();
 
@@ -121,6 +125,8 @@ test.describe.serial('Completed(二重終了防止)とDiningFeedback(重複防�
     const p2 = await c2.newPage();
     await p1.goto(`/matches/${matchId}`);
     await p2.goto(`/matches/${matchId}`);
+    p1.once('dialog', dialog => dialog.accept());
+    p2.once('dialog', dialog => dialog.accept());
     await Promise.all([
       p1.getByRole('button', { name: '飯終了' }).click(),
       p2.getByRole('button', { name: '飯終了' }).click(),

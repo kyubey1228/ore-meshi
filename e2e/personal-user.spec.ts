@@ -11,7 +11,7 @@ test('個人ユーザー: 一覧・Demand・マイページ・通知設定を横
   await expect(page.getByRole('heading', { name: 'マイページ' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '友達も誘う', level: 2 })).toBeVisible();
   await page.goto('/notifications');
-  await expect(page.getByRole('heading', { name: 'ちょっと一息。', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '通知', level: 1 })).toBeVisible();
 });
 
 test('個人ユーザー: 未ログイン参加CTAはログイン後の戻り先を保持する', async ({ browser }) => {
