@@ -59,7 +59,7 @@ function topPicks(profile: { sampleSize: number; genreWeights: unknown; areaWeig
 }
 
 export async function getRecommendationTopPicks(userId: string): Promise<RecommendationTopPicks | null> {
-  const profile = await prisma.userRecommendationProfile.findUnique({ where: { userId } });
+  const profile = await prisma.userRecommendationProfile.findUnique({ where: { userId }, select: { sampleSize: true, genreWeights: true, areaWeights: true } });
   return topPicks(profile);
 }
 

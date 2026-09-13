@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getRecentlyViewed } from '@/lib/guest-storage';
-import { lookupMeals } from '@/server/actions/meal-lookup';
+import type { Meal } from '@prisma/client';
 
-type LookupMeal = Awaited<ReturnType<typeof lookupMeals>>[number];
+type LookupMeal = Pick<Meal, 'id' | 'title' | 'area' | 'genre'>;
 
 export function RecentlyViewedSection({ loggedIn }: { loggedIn: boolean }) {
   const [meals, setMeals] = useState<LookupMeal[]>([]);
@@ -13,7 +13,13 @@ export function RecentlyViewedSection({ loggedIn }: { loggedIn: boolean }) {
     if (loggedIn) return;
     const ids = getRecentlyViewed();
     if (ids.length === 0) return;
-    void lookupMeals({ mealIds: ids }).then(setMeals).catch(() => {});
+    const controller = new AbortController();
+    const query = new URLSearchParams(ids.slice(0, 20).map(id => ['id', id]));
+    void fetch(`/api/meals/lookup?${query}`, { signal: controller.signal, cache: 'no-store' })
+      .then(response => response.ok ? response.json() as Promise<LookupMeal[]> : [])
+      .then(results => { if (!controller.signal.aborted) setMeals(results); })
+      .catch(() => {});
+    return () => controller.abort();
   }, [loggedIn]);
 
   if (meals.length === 0) return null;

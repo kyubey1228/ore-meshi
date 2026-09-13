@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { ArrowRight, BarChart3, Clock3, Megaphone, Users } from 'lucide-react';
 import { currentBusinessMembership } from '@/server/business';
 import { getBusinessPricingCatalog } from '@/server/billing';
@@ -23,17 +24,35 @@ const standard = ['スポンサー飯・空席スポンサー割引', 'エリア
 const pro = ['STANDARDの全機能', 'トップページ露出候補', 'あと1人自動Boost', '空席スポンサー優先表示', '複数店舗・Direct Ads', '高度Analytics・ブランド企画'];
 const yen = (value: number) => new Intl.NumberFormat('ja-JP').format(value);
 
-export default async function BusinessLanding() {
-  const [membership, catalog, partners] = await Promise.all([currentBusinessMembership(), getBusinessPricingCatalog(), getActivePartnerCampaigns()]);
-  const signupHref = membership ? '/business/dashboard' : '/business/signup';
+export default function BusinessLanding() {
+  // 同じリクエストの認証結果を共有し、公開ヒーローの表示はDBや料金APIを待たせない。
+  const membershipPromise = currentBusinessMembership();
   return <div className="business-lp">
     <BusinessMarketingTracker eventType="BUSINESS_LP_VIEW" />
     <section className="business-hero">
-      <span className="business-hero-circle" aria-hidden="true"><Image src="/business/hero/izakaya-interior.jpg" alt="" fill sizes="420px" style={{ objectFit: 'cover' }} /></span>
+      <span className="business-hero-circle" aria-hidden="true"><Image src="/business/hero/izakaya-interior.jpg" alt="" fill preload sizes="(max-width: 720px) 150px, 420px" style={{ objectFit: 'cover' }} /></span>
       <span className="eyebrow orange">俺メシ FOR BUSINESS</span><h1>空席を、<br />今夜の客に。</h1>
       <p>スポンサー飯・空席スポンサーを使って、店舗の空席やキャンペーンを実際の“飯の予定”に変えます。</p>
-      <div className="hero-actions"><BusinessMarketingLink className="btn" href={signupHref} eventType="BUSINESS_SIGNUP_CTA_CLICK" placement="HERO">{membership ? '店舗管理へ' : '店舗・企業登録'}<ArrowRight size={18} /></BusinessMarketingLink><BusinessMarketingLink className="btn secondary" href="/business/pricing" eventType="PRICING_CTA_CLICK" placement="HERO">料金を見る</BusinessMarketingLink><BusinessMarketingLink className="btn ghost" href="/business/contact" eventType="CONTACT_CTA_CLICK" placement="HERO">まず相談する</BusinessMarketingLink></div>
+      <div className="hero-actions"><Suspense fallback={<HeroSignupLink member={false} />}><PersonalizedHeroSignup membershipPromise={membershipPromise} /></Suspense><BusinessMarketingLink className="btn secondary" href="/business/pricing" eventType="PRICING_CTA_CLICK" placement="HERO">料金を見る</BusinessMarketingLink><BusinessMarketingLink className="btn ghost" href="/business/contact" eventType="CONTACT_CTA_CLICK" placement="HERO">まず相談する</BusinessMarketingLink></div>
     </section>
+    <Suspense fallback={<section className="section" role="status" aria-live="polite"><p className="muted">店舗向けサービスをご案内しています…</p></section>}>
+      <BusinessLandingContent membershipPromise={membershipPromise} />
+    </Suspense>
+  </div>;
+}
+
+function HeroSignupLink({ member }: { member: boolean }) {
+  return <BusinessMarketingLink className="btn" href={member ? '/business/dashboard' : '/business/signup'} eventType="BUSINESS_SIGNUP_CTA_CLICK" placement="HERO">{member ? '店舗管理へ' : '店舗・企業登録'}<ArrowRight size={18} /></BusinessMarketingLink>;
+}
+
+async function PersonalizedHeroSignup({ membershipPromise }: { membershipPromise: ReturnType<typeof currentBusinessMembership> }) {
+  return <HeroSignupLink member={Boolean(await membershipPromise)} />;
+}
+
+async function BusinessLandingContent({ membershipPromise }: { membershipPromise: ReturnType<typeof currentBusinessMembership> }) {
+  const [membership, catalog, partners] = await Promise.all([membershipPromise, getBusinessPricingCatalog(), getActivePartnerCampaigns()]);
+  const signupHref = membership ? '/business/dashboard' : '/business/signup';
+  return <>
 
     {partners.length > 0 && <section className="partner-strip"><strong>{partners[0].area}エリア 先行店舗募集中</strong><span>{partners[0].remaining === null ? '募集枠あり' : `残り${partners[0].remaining}店舗`}</span><BusinessMarketingLink href="/business/partner" eventType="PARTNER_CTA_CLICK" placement="LP_TOP">パートナー募集を見る →</BusinessMarketingLink></section>}
 
@@ -60,7 +79,7 @@ export default async function BusinessLanding() {
     <section className="partner-cta"><span>🤝</span><div><h2>スポンサー企業・飲食店募集中</h2><p>俺メシと一緒に、新しい飯の集まり方を作りませんか？</p></div><BusinessMarketingLink className="btn secondary" href="/business/partner" eventType="PARTNER_CTA_CLICK" placement="LP_BOTTOM">パートナー募集を見る</BusinessMarketingLink></section>
     <section className="invitation"><span>🍚</span><div><h2>今日の空席から、始めませんか？</h2><p>登録後に内容を確認します。商品が決まっていなくても相談できます。</p></div><BusinessMarketingLink className="btn" href={signupHref} eventType="BUSINESS_SIGNUP_CTA_CLICK" placement="LP_BOTTOM">{membership ? '店舗管理へ' : '店舗・企業登録'}</BusinessMarketingLink><BusinessMarketingLink className="btn ghost" href="/business/contact" eventType="CONTACT_CTA_CLICK" placement="LP_BOTTOM">まず相談する</BusinessMarketingLink></section>
     {!membership && <BusinessMarketingLink className="business-sticky-cta" href="/business/signup" eventType="BUSINESS_SIGNUP_CTA_CLICK" placement="MOBILE_STICKY">店舗・企業登録</BusinessMarketingLink>}
-  </div>;
+  </>;
 }
 
 function XPost({ kind, body, og }: { kind: string; body: string; og: string }) { return <article className="x-post-preview"><div className="person"><span className="avatar">店</span><span><strong>サンプル店舗</strong><small>@sample_store</small></span></div><p className="pre-wrap">{body}</p><div className="x-og"><small>ore-meshi.example</small><strong>PR · {kind}</strong><span>{og}</span></div><small className="muted">投稿画面で本文を編集できます</small></article>; }

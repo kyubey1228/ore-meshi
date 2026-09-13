@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const port = Number(process.env.E2E_PORT ?? 3100);
 const baseURL = `http://127.0.0.1:${port}`;
+const production = process.env.E2E_PRODUCTION === 'true';
 
 export default defineConfig({
   testDir: './e2e',
@@ -19,13 +20,15 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   globalSetup: './e2e/global-setup.ts',
   webServer: {
-    command: `npm run dev -- --port ${port}`,
+    command: production ? 'node scripts/start-e2e-production.mjs' : `npm run dev -- --port ${port}`,
     url: `${baseURL}/api/health`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !process.env.CI && !production,
     timeout: 120_000,
     stdout: 'pipe',
     stderr: 'pipe',
     env: {
+      PORT: String(port),
+      HOSTNAME: '127.0.0.1',
       DATABASE_URL: process.env.E2E_DATABASE_URL ?? '',
       DIRECT_URL: process.env.E2E_DATABASE_URL ?? '',
       AUTH_SECRET: process.env.AUTH_SECRET ?? 'ore-meshi-e2e-secret-at-least-32-characters',

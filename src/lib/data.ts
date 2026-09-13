@@ -1,14 +1,17 @@
 import 'server-only';
+import { cache } from 'react';
 import { unstable_cache } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { currentUserId, requirePageUser } from '@/server/auth';
 import { filterSchema, idSchema } from '@/validators';
-import type { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import { rankMeals, type RankingContext } from '@/lib/meal-ranking';
-export const publicUser = { id:true, twitterUsername:true, displayName:true, image:true, bio:true, createdAt:true,diningTypes:{where:{diningType:{isActive:true}},orderBy:{diningType:{sortOrder:'asc'}},select:{diningType:{select:{id:true,slug:true,label:true}}}} } satisfies Prisma.UserSelect;
+import { fetchOpenMeals, isDefaultMealQuery, publicUserSelect as publicUser } from '@/server/meal-feed-query';
+import { getPublicMealFeed } from '@/server/public-meal-feed';
+import { MEAL_PAGE_SIZE } from '@/lib/meal-pagination';
+export { publicUser };
 export async function getCurrentUser(){const id=await currentUserId();return id?prisma.user.findUnique({where:{id},select:publicUser}):null;}
-export async function getCurrentUserForProfile(userId:string){return prisma.user.findUnique({where:{id:userId},select:{...publicUser,email:true}});}
+export async function getCurrentUserForProfile(userId:string){return prisma.user.findUnique({where:{id:userId},select:{displayName:true,bio:true,email:true,diningTypes:{where:{diningType:{isActive:true}},select:{diningType:{select:{id:true}}}}}});}
 // 飯タイプ/目的タグは管理画面がなく、実質デプロイ時にしか変わらない参照データ。
 // idは実在のDB行(MealPurpose/DiningType)を指し、募集作成・プロフィール編集で本物のIDかDB側検証を通すため、
 // 値を静的にハードコードすることはできない(検証が必ず通るとは限らずデータ不整合の原因になる)。
@@ -62,33 +65,7 @@ export async function getNotificationPreference(userId:string){
   const pref=await prisma.notificationPreference.findUnique({where:{userId}});
   return pref??{recruitmentEnabled:true,participationEnabled:true,recommendationEnabled:true,emailTransactionalEnabled:true,emailMarketingEnabled:false};
 }
-function whenWhere(when: string | undefined): Prisma.MealWhereInput {
-  if (!when) return {};
-  const now = new Date();
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
-  if (when === 'today') return { candidates: { some: { date: { gte: todayStart, lt: todayEnd } } } };
-  if (when === 'tonight') return { candidates: { some: { date: { gte: todayStart, lt: todayEnd }, startTime: { gte: '18:00' } } } };
-  if (when === 'soon') return { candidates: { some: { date: { gte: todayStart, lt: todayEnd } } } };
-  return {};
-}
 
-function withinHours(meal: { candidates: { date: Date; startTime: string }[] }, hours: number, now: Date) {
-  return meal.candidates.some(c => {
-    const [h, m] = c.startTime.split(':').map(Number);
-    const at = new Date(c.date); at.setHours(h, m, 0, 0);
-    const diffH = (at.getTime() - now.getTime()) / (1000 * 60 * 60);
-    return diffH >= 0 && diffH <= hours;
-  });
-}
-
-type MealListFilters = Partial<z.infer<typeof filterSchema>>;
-async function fetchOpenMeals(filters: MealListFilters, limit: number) {
-  const where: Prisma.MealWhereInput={status:'OPEN',AND:[{OR:[{deadline:null},{deadline:{gt:new Date()}}]}],...(filters.area?{area:{contains:filters.area,mode:'insensitive'}}:{}),...(filters.paymentType?{paymentType:filters.paymentType}:{}),...(typeof filters.budget==='number'?{budgetMax:{lte:filters.budget}}:{}),...(filters.date?{candidates:{some:{date:new Date(filters.date)}}}:{}),...(filters.purpose?{purposes:{some:{purpose:{slug:filters.purpose,isActive:true}}}}:{}),...whenWhere(filters.when)};
-  // sponsoredMeals.businessAccountのネスト取得はMealごとに個別queryを発行せず1回のfindManyにバッチされる
-  // (Prismaのrelation loadingで、行ごとのN+1にはならない)。Boostランキングにプラン情報が必要なため取得する。
-  return prisma.meal.findMany({where,orderBy:{createdAt:'desc'},take:limit,include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}],...(filters.when==='soon'?{}:{take:1})},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{candidates:true,joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true,businessAccount:{select:{planOverride:true,subscription:{select:{plan:true,status:true,currentPeriodEnd:true}}}}}}}});
-}
 // DB接続経路のレイテンシが大きいため(1往復で数百ms〜規模)、一覧の取得自体を短時間キャッシュし、
 // 誰が見ても同じ結果になるDB取得部分と、閲覧者ごとに変わる並び替え(rankMeals)を分離する。
 const cachedFetchOpenMeals = unstable_cache(fetchOpenMeals, ['open-meals'], { revalidate: 60 });
@@ -97,11 +74,13 @@ export async function getMealCandidates(input: unknown = {}, limit = 40) {
   const parsed=filterSchema.safeParse(input); const filters=parsed.success?parsed.data:{};
   if(!process.env.DATABASE_URL) return [];
   let meals;
-  try{meals=await cachedFetchOpenMeals(filters,Math.min(Math.max(limit,1),100));}catch(error){console.error('Meal list unavailable',error instanceof Error?error.name:'UnknownError');return[];}
-  const now=new Date();
-  const soonFiltered=filters.when==='soon'?meals.filter(meal=>withinHours(meal,3,now)):meals;
-  const remainingFiltered=filters.remaining?soonFiltered.filter(meal=>meal.maxParticipants-(meal._count.joinRequests+1)===filters.remaining):soonFiltered;
-  return remainingFiltered;
+  try{
+    const take=Math.min(Math.max(limit,1),100);
+    meals=isDefaultMealQuery(filters)&&take<=MEAL_PAGE_SIZE+1
+      ? (await getPublicMealFeed()).meals.filter(meal=>!meal.deadline||meal.deadline>new Date()).slice(0,take)
+      : await cachedFetchOpenMeals(filters,take);
+  }catch(error){console.error('Meal list unavailable',error instanceof Error?error.name:'UnknownError');if(isDefaultMealQuery(filters))throw error;return[];}
+  return meals;
 }
 export async function getRankedMealList(input: unknown = {}, context: RankingContext = {}, limit = 40) {
   const meals=await getMealCandidates(input,limit);
@@ -132,7 +111,7 @@ export async function getUserPreferences(userId: string){
 }
 const WEEKDAY_LABEL_JA=['日','月','火','水','木','金','土'];
 export async function getFrequentPostingPattern(userId: string){
-  const meals=await prisma.meal.findMany({where:{hostId:userId},orderBy:{createdAt:'desc'},take:20,include:{candidates:{orderBy:{date:'asc'},take:1}}});
+  const meals=await prisma.meal.findMany({where:{hostId:userId},orderBy:{createdAt:'desc'},take:20,select:{candidates:{orderBy:{date:'asc'},take:1,select:{date:true,startTime:true}}}});
   const buckets=new Map<string,number>();
   for(const meal of meals){
     const c=meal.candidates[0];if(!c)continue;
@@ -145,38 +124,49 @@ export async function getFrequentPostingPattern(userId: string){
   return {label:`${WEEKDAY_LABEL_JA[Number(dowStr)]}曜${hourStr}時頃`,weekday:Number(dowStr),hour:Number(hourStr)};
 }
 export async function getReferralStats(userId: string){
-  const [invitedCount,signupCount,activatedCount,referredUsers]=await Promise.all([
-    prisma.referral.count({where:{referrerUserId:userId}}),
-    prisma.referral.count({where:{referrerUserId:userId,referredUserId:{not:null}}}),
-    prisma.referral.count({where:{referrerUserId:userId,activatedAt:{not:null}}}),
-    prisma.referral.findMany({where:{referrerUserId:userId,referredUserId:{not:null}},select:{referredUserId:true},distinct:['referredUserId']}),
+  const [referrals,referredMatchCount]=await Promise.all([
+    prisma.referral.aggregate({where:{referrerUserId:userId},_count:{_all:true,referredUserId:true,activatedAt:true}}),
+    prisma.match.count({where:{participants:{some:{user:{referralsReceived:{some:{referrerUserId:userId}}}}}}}),
   ]);
-  const referredUserIds=referredUsers.map(r=>r.referredUserId).filter((id):id is string=>Boolean(id));
   // 「紹介経由成立人数」はactivatedCount(=初回参加/成立まで到達した被紹介者の人数)とは別に、
   // 被紹介者が実際に成立させたMatch件数(延べ)を見る指標として分けて出す。
-  const referredMatchCount=referredUserIds.length?await prisma.match.count({where:{participants:{some:{userId:{in:referredUserIds}}}}}):0;
-  return {invitedCount,signupCount,activatedCount,referredMatchCount};
+  return {invitedCount:referrals._count._all,signupCount:referrals._count.referredUserId,activatedCount:referrals._count.activatedAt,referredMatchCount};
 }
+// The detail page streams these profile tags separately from the actionable meal.
+// Query the tag table directly so fetching labels does not need a second relation roundtrip.
+export const getUserDiningTypes=cache(async (userId: string)=>{
+  if(!process.env.DATABASE_URL)return [];
+  return prisma.diningType.findMany({where:{isActive:true,users:{some:{userId}}},orderBy:{sortOrder:'asc'},select:{id:true,slug:true,label:true}});
+});
 export async function getHostTrustStats(hostId: string){
-  if(!process.env.DATABASE_URL) return {hostedCount:0,completedCount:0};
-  const [hostedCount,completedCount]=await Promise.all([
+  if(!process.env.DATABASE_URL) return {hostedCount:0,completedCount:0,diningTypeCount:0};
+  const [hostedCount,completedCount,diningTypes]=await Promise.all([
     prisma.meal.count({where:{hostId,status:{in:['OPEN','MATCHED','CLOSED']}}}),
     prisma.match.count({where:{status:'COMPLETED',meal:{hostId}}}),
+    getUserDiningTypes(hostId),
   ]);
-  return {hostedCount,completedCount};
+  return {hostedCount,completedCount,diningTypeCount:diningTypes.length};
 }
 export async function getFavoriteMealIds(userId: string){
   if(!process.env.DATABASE_URL) return [];
   const favorites=await prisma.favorite.findMany({where:{userId},select:{mealId:true},orderBy:{createdAt:'desc'}});
   return favorites.map(f=>f.mealId);
 }
-export async function getMealById(raw: string){
+export async function isFavoriteMeal(userId: string, mealId: string){
+  if(!process.env.DATABASE_URL)return false;
+  return Boolean(await prisma.favorite.findUnique({where:{userId_mealId:{userId,mealId}},select:{id:true}}));
+}
+// Metadata and page rendering share this public lookup only within the current request.
+// Applicant messages and viewer-specific matches never enter a shared data cache.
+export const getPublicMealById=cache(async (raw: string)=>{
   const id=idSchema.safeParse(raw); if(!id.success || !process.env.DATABASE_URL)return null;
-  const userId=await currentUserId();
-  const meal=await prisma.meal.findUnique({where:{id:id.data},include:{host:{select:publicUser},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
+  return prisma.meal.findUnique({where:{id:id.data},include:{host:{select:{id:true,twitterUsername:true,displayName:true,image:true,bio:true}},candidates:{orderBy:[{date:'asc'},{startTime:'asc'}]},purposes:{where:{purpose:{isActive:true}},orderBy:{purpose:{sortOrder:'asc'}},select:{purpose:{select:{id:true,slug:true,label:true}}}},_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}},sponsoredMeals:{where:{status:'ACTIVE'},take:1,select:{sponsorName:true,benefit:true}}}});
+});
+export async function getMealById(raw: string){
+  const [meal,userId]=await Promise.all([getPublicMealById(raw),currentUserId()]);
   if(!meal)return null;
   // Applicants' messages are visible only to the host and the applicant.
-  const [requests,matches]=userId?await Promise.all([prisma.joinRequest.findMany({where:{mealId:meal.id,...(meal.hostId===userId?{}:{userId})},include:{user:{select:publicUser},candidate:true},orderBy:{createdAt:'asc'}}),prisma.match.findMany({where:{mealId:meal.id,participants:{some:{userId}}},select:{id:true,status:true,scheduledAt:true}})]):[[],[]];
+  const [requests,matches]=userId?await Promise.all([prisma.joinRequest.findMany({where:{mealId:meal.id,...(meal.hostId===userId?{}:{userId})},include:{user:{select:{displayName:true,twitterUsername:true,image:true,diningTypes:publicUser.diningTypes}},candidate:true},orderBy:{createdAt:'asc'}}),prisma.match.findMany({where:{mealId:meal.id,participants:{some:{userId}}},select:{id:true,status:true,scheduledAt:true}})]):[[],[]];
   return {...meal,joinRequests:requests,matches};
 }
 export async function getMealShareData(raw:string){
@@ -210,24 +200,27 @@ export async function getActiveCoupons(area?: string){
 }
 export async function getUserProfileData(raw: string){
   const parsed=idSchema.safeParse(raw);if(!parsed.success || !process.env.DATABASE_URL)return null;
-  const id=parsed.data;const user=await prisma.user.findUnique({where:{id},select:publicUser});if(!user)return null;
+  const id=parsed.data;
   const where: Prisma.MatchWhereInput={status:'COMPLETED',participants:{some:{userId:id}}};
-  const [completedMealCount,last]=await Promise.all([prisma.match.count({where}),prisma.match.findFirst({where,orderBy:{scheduledAt:'desc'},select:{scheduledAt:true}})]);
-  return {user,completedMealCount,lastDiningDate:last?.scheduledAt??null};
+  const [user,history]=await Promise.all([
+    prisma.user.findUnique({where:{id},select:publicUser}),
+    prisma.match.aggregate({where,_count:{_all:true},_max:{scheduledAt:true}}),
+  ]);
+  return user?{user,completedMealCount:history._count._all,lastDiningDate:history._max.scheduledAt}:null;
 }
 async function fetchMyPageData(userId: string){
-  const [hostedMeals,joinRequests,matches,businessMembership,currentUser]=await Promise.all([
-    prisma.meal.findMany({where:{hostId:userId},orderBy:{createdAt:'desc'},include:{host:{select:publicUser},candidates:true,_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}}),
-    prisma.joinRequest.findMany({where:{userId,status:'PENDING'},orderBy:{createdAt:'desc'},include:{meal:true,candidate:true}}),
-    prisma.match.findMany({where:{participants:{some:{userId}}},orderBy:{scheduledAt:'desc'},include:{meal:true,participants:{include:{user:{select:publicUser}}}}}),
-    prisma.businessMember.findFirst({where:{userId,OR:[{role:{in:['OWNER','ADMIN']}},{canPostToSocial:true}]},select:{businessAccount:{select:{name:true}}}}),
-    prisma.user.findUnique({where:{id:userId},select:{isAdmin:true,onboardingCompletedAt:true}})
+  const [hostedMeals,joinRequests,matches,completedMatches,currentUser]=await Promise.all([
+    prisma.meal.findMany({where:{hostId:userId},orderBy:{createdAt:'desc'},select:{id:true,title:true,status:true,area:true,genre:true,maxParticipants:true,_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}}),
+    prisma.joinRequest.findMany({where:{userId,status:'PENDING'},orderBy:{createdAt:'desc'},select:{id:true,mealId:true,status:true,meal:{select:{title:true}},candidate:{select:{startTime:true}}}}),
+    prisma.match.findMany({where:{status:'ACTIVE',participants:{some:{userId}}},orderBy:{scheduledAt:'desc'},select:{id:true,status:true,scheduledAt:true,meal:{select:{title:true}}}}),
+    prisma.match.findMany({where:{status:'COMPLETED',participants:{some:{userId}}},orderBy:{scheduledAt:'desc'},take:5,select:{id:true,scheduledAt:true,meal:{select:{title:true,area:true,paymentType:true}},participants:{select:{user:{select:{id:true,image:true,displayName:true}}}}}}),
+    prisma.user.findUnique({where:{id:userId},select:{isAdmin:true,onboardingCompletedAt:true,businessMemberships:{where:{OR:[{role:{in:['OWNER','ADMIN']}},{canPostToSocial:true}]},take:1,select:{businessAccount:{select:{name:true}}}}}})
   ]);
-  return {hostedMeals,joinRequests,matches,businessMembership,isAdmin:currentUser?.isAdmin??false,onboardingCompletedAt:currentUser?.onboardingCompletedAt??null,completedMatches:matches.filter(m=>m.status==='COMPLETED')};
+  return {hostedMeals,joinRequests,matches,completedMatches,businessMembership:currentUser?.businessMemberships[0]??null,isAdmin:currentUser?.isAdmin??false,onboardingCompletedAt:currentUser?.onboardingCompletedAt??null};
 }
 // requirePageUser()はcookies()を使う動的APIのため、unstable_cache対象の外側で呼ぶ必要がある。
 // DB接続のレイテンシが大きいため、同じユーザーの短時間の再訪問・リロードではDBへ往復しないよう15秒キャッシュする。
-const cachedFetchMyPageData = unstable_cache(fetchMyPageData, ['my-page-data'], { revalidate: 15 });
+const cachedFetchMyPageData = unstable_cache(fetchMyPageData, ['my-page-data', 'summary-v2'], { revalidate: 15 });
 export async function getMyPageData(userId?: string){
   const uid = userId ?? await requirePageUser();
   const data = await cachedFetchMyPageData(uid);
@@ -235,6 +228,9 @@ export async function getMyPageData(userId?: string){
 }
 export async function getMatchById(raw: string){
   const userId=await requirePageUser(); const id=idSchema.safeParse(raw);if(!id.success)return null;
-  return prisma.match.findFirst({where:{id:id.data,participants:{some:{userId}}},include:{meal:true,participants:{include:{user:{select:publicUser}}},rescheduleProposals:{orderBy:{createdAt:'desc'},include:{proposer:{select:publicUser},votes:{select:{userId:true}}}},diningFeedbacks:{where:{fromUserId:userId}}}});
+  return prisma.match.findFirst({where:{id:id.data,participants:{some:{userId}}},select:{id:true,mealId:true,status:true,scheduledAt:true,meal:{select:{title:true,area:true,restaurant:true,hostId:true}},participants:{select:{userId:true,user:{select:publicUser}}},rescheduleProposals:{orderBy:{createdAt:'desc'},select:{id:true,proposedAt:true,proposerId:true,status:true,proposer:{select:{displayName:true}},votes:{select:{userId:true}}}},diningFeedbacks:{where:{fromUserId:userId},select:{toUserId:true}}}});
 }
-export async function getDiningHistory(){return (await getMyPageData()).completedMatches;}
+export async function getDiningHistory(){
+  const userId=await requirePageUser();
+  return prisma.match.findMany({where:{status:'COMPLETED',participants:{some:{userId}}},orderBy:{scheduledAt:'desc'},select:{id:true,scheduledAt:true,meal:{select:{title:true,area:true,paymentType:true}},participants:{select:{user:{select:{id:true,displayName:true,image:true,twitterUsername:true,diningTypes:publicUser.diningTypes}}}}}});
+}

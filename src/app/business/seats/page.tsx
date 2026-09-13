@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { currentBusinessMembership, getBusinessDashboard } from '@/server/business';
+import { currentBusinessMembership } from '@/server/business';
+import { prisma } from '@/lib/prisma';
 import { getBusinessPricingCatalog } from '@/server/billing';
 import { BusinessCheckoutButton } from '@/components/business-checkout-button';
 import { BusinessEmptyState } from '@/components/business-empty-state';
@@ -24,12 +25,19 @@ export default async function SeatCampaignsList({ searchParams }: { searchParams
   if (!membership) redirect('/business/onboarding');
   const { tab: tabParam } = await searchParams;
   const tab: Tab = TABS.some(t => t.key === tabParam) ? (tabParam as Tab) : 'ACTIVE';
-  const [data, catalog] = await Promise.all([getBusinessDashboard(), getBusinessPricingCatalog()]);
-  const now = data.now;
-  const drafts = data.seatCampaigns.filter(item => item.status === 'DRAFT');
+  const [seatCampaigns, catalog] = await Promise.all([
+    prisma.seatCampaign.findMany({
+      where: { businessAccountId: membership.businessAccountId },
+      orderBy: { createdAt: 'desc' }, take: 20,
+      select: { id: true, status: true, restaurantName: true, remainingSeats: true, endsAt: true, benefit: true },
+    }),
+    getBusinessPricingCatalog(),
+  ]);
+  const now = new Date();
+  const drafts = seatCampaigns.filter(item => item.status === 'DRAFT');
   const priceLabel = catalog ? `${catalog.seatCampaign.toLocaleString('ja-JP')}円で支払って公開する` : '支払って公開する';
 
-  const items = data.seatCampaigns.filter(item => {
+  const items = seatCampaigns.filter(item => {
     const expired = isSeatCampaignExpired(item.status, item.endsAt, now);
     if (tab === 'EXPIRED') return expired;
     if (tab === 'ACTIVE') return item.status === 'ACTIVE' && !expired;

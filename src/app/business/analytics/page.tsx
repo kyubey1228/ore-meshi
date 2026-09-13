@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { currentBusinessMembership, getBusinessCompletionStats, getBusinessDashboard, getBusinessMonthlyStats } from '@/server/business';
+import { currentBusinessMembership, getBusinessCompletionStats, getBusinessMonthlyStats } from '@/server/business';
+import { prisma } from '@/lib/prisma';
 import { describeCouponRedemptions, describeMealsClosed, describeMonthlyReach, describeReferrals } from '@/features/business-analytics/copy';
 import { BusinessEmptyState } from '@/components/business-empty-state';
 
@@ -11,12 +12,12 @@ export const metadata = { title: 'Business Analytics' };
 export default async function BusinessAnalytics() {
   const membership = await currentBusinessMembership();
   if (!membership) redirect('/business/onboarding');
-  const [data, monthly, completion] = await Promise.all([
-    getBusinessDashboard(),
+  const [analytics, monthly, completion] = await Promise.all([
+    prisma.referralEvent.groupBy({ by: ['eventType'], where: { businessAccountId: membership.businessAccountId }, _count: { _all: true } }),
     getBusinessMonthlyStats(membership.businessAccountId),
     getBusinessCompletionStats(membership.businessAccountId),
   ]);
-  const totalCounts = Object.fromEntries(data.analytics.map(row => [row.eventType, row._count._all]));
+  const totalCounts = Object.fromEntries(analytics.map(row => [row.eventType, row._count._all]));
   const hasAnyThisMonth = monthly.mealsMatched + monthly.referrals + monthly.couponRedemptions + monthly.xVisits > 0;
 
   return (

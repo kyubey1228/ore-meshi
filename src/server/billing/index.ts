@@ -13,12 +13,14 @@ export { capabilitiesForPlan };
 
 export async function getBusinessPlan(businessAccountId?: string): Promise<BusinessPlan> {
   const membership = await requireBillingMembership(businessAccountId);
-  const subscription = await prisma.businessSubscription.findUnique({ where: { businessAccountId: membership.businessAccountId } });
-  return effectivePlanFromAccount(membership.businessAccount.planOverride, subscription);
+  return getBusinessPlanForMembership(membership);
 }
 
 export async function getBusinessPlanForMembership(membership: { businessAccountId: string; businessAccount: { planOverride: BusinessPlan | null } }): Promise<BusinessPlan> {
-  const subscription = await prisma.businessSubscription.findUnique({ where: { businessAccountId: membership.businessAccountId } });
+  const subscription = await prisma.businessSubscription.findUnique({
+    where: { businessAccountId: membership.businessAccountId },
+    select: { plan: true, status: true, currentPeriodEnd: true },
+  });
   return effectivePlanFromAccount(membership.businessAccount.planOverride, subscription);
 }
 
@@ -29,7 +31,7 @@ export async function getBusinessPlanForMembership(membership: { businessAccount
 export async function getPublicBusinessPlan(businessAccountId: string): Promise<BusinessPlan> {
   const [account, subscription] = await Promise.all([
     prisma.businessAccount.findUnique({ where: { id: businessAccountId }, select: { planOverride: true } }),
-    prisma.businessSubscription.findUnique({ where: { businessAccountId } }),
+    prisma.businessSubscription.findUnique({ where: { businessAccountId }, select: { plan: true, status: true, currentPeriodEnd: true } }),
   ]);
   return effectivePlanFromAccount(account?.planOverride ?? null, subscription);
 }

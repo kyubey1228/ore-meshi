@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentBusinessMembership, getBusinessTeam } from '@/server/business';
-import { getBusinessBillingState } from '@/server/billing';
+import { getBusinessPlan } from '@/server/billing';
 import { getCurrentUser } from '@/lib/data';
 import { UserAvatar } from '@/components/meal-card';
 import { LogoutButton } from '@/components/auth-buttons';
@@ -17,11 +17,11 @@ export const metadata = { title: 'アカウント設定 | 店舗・企業向け'
 export default async function BusinessAccountPage() {
   const membership = await currentBusinessMembership();
   if (!membership) redirect('/business/onboarding');
-  const [user, billing, team, notificationPreference] = await Promise.all([
+  const [user, plan, team, notificationPreference] = await Promise.all([
     getCurrentUser(),
-    // STAFF権限やPENDING/SUSPENDED状態ではgetBusinessBillingState()がensure()で弾くため、
+    // STAFF権限やPENDING/SUSPENDED状態ではgetBusinessPlan()がensure()で弾くため、
     // アカウント設定ページ自体(ログアウト等)は使えるようプラン取得の失敗だけは許容する。
-    getBusinessBillingState(membership.businessAccountId).catch(() => null),
+    getBusinessPlan(membership.businessAccountId).catch(() => null),
     getBusinessTeam(membership.businessAccountId),
     prisma.businessNotificationPreference.findUnique({ where: { businessAccountId: membership.businessAccountId } }),
   ]);
@@ -80,7 +80,7 @@ export default async function BusinessAccountPage() {
 
       <div className="panel">
         <h2>プラン</h2>
-        {billing ? <p className="muted">現在のプラン：{PLAN_LABEL_JA[billing.plan]}</p> : <p className="muted">プランの確認にはオーナー・管理者権限が必要です。</p>}
+        {plan ? <p className="muted">現在のプラン：{PLAN_LABEL_JA[plan]}</p> : <p className="muted">プランの確認にはオーナー・管理者権限が必要です。</p>}
         <Link className="text-link" href="/business/billing">プランを見る・変更する →</Link>
       </div>
     </section>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { currentBusinessMembership, getBusinessDashboard } from '@/server/business';
+import { currentBusinessMembership } from '@/server/business';
+import { prisma } from '@/lib/prisma';
 import { getBusinessPricingCatalog } from '@/server/billing';
 import { BusinessStatusBadge } from '@/components/business-status-badge';
 import { BusinessCheckoutButton } from '@/components/business-checkout-button';
@@ -15,7 +16,14 @@ export const metadata = { title: 'スポンサー飯' };
 export default async function SponsoredMealsList() {
   const membership = await currentBusinessMembership();
   if (!membership) redirect('/business/onboarding');
-  const [data, catalog] = await Promise.all([getBusinessDashboard(), getBusinessPricingCatalog()]);
+  const [sponsoredMeals, catalog] = await Promise.all([
+    prisma.sponsoredMeal.findMany({
+      where: { businessAccountId: membership.businessAccountId },
+      orderBy: { createdAt: 'desc' }, take: 20,
+      select: { id: true, status: true, title: true, restaurantName: true, startsAt: true, benefit: true },
+    }),
+    getBusinessPricingCatalog(),
+  ]);
   const priceYen = catalog ? catalog.sponsoredMeal.toLocaleString('ja-JP') : '5,000';
 
   return (
@@ -26,12 +34,12 @@ export default async function SponsoredMealsList() {
         <Link className="btn" href="/business/sponsored-meals/new">スポンサー飯を出す</Link>
       </div>
 
-      {!data.sponsoredMeals.length && (
+      {!sponsoredMeals.length && (
         <BusinessEmptyState icon="🍚" message="まだスポンサー飯を出してません。" ctaHref="/business/sponsored-meals/new" ctaLabel="最初のスポンサー飯を出す" />
       )}
 
       <div className="dashboard-grid">
-        {data.sponsoredMeals.map(item => (
+        {sponsoredMeals.map(item => (
           <article className="panel" key={item.id}>
             <BusinessStatusBadge status={item.status} />
             <h2>{item.title}</h2>

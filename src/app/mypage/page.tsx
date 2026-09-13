@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { getFavoriteMealIds, getMealsByIds, getMyPageData, getReferralStats } from '@/lib/data';
 import { getOrCreateReferralCode } from '@/server/referral';
@@ -10,22 +11,41 @@ import { UserAvatar, MealCard } from '@/components/meal-card';
 import { ReferralShare } from '@/components/referral-share';
 
 export const metadata = { title: 'マイページ' };
+async function FavoriteMeals({userId}:{userId:string}) {
+  const favoriteIds = await getFavoriteMealIds(userId);
+  const favoriteMeals = favoriteIds.length ? await getMealsByIds(favoriteIds) : [];
+  return favoriteMeals.length > 0 && <>
+    <div className="section-heading"><h2>あとで見る</h2></div>
+    <div className="meal-grid">{favoriteMeals.map(meal => <MealCard key={meal.id} meal={meal} />)}</div>
+  </>;
+}
+
+async function MyReferral({userId,hasUnfilledMeal}:{userId:string;hasUnfilledMeal:boolean}) {
+  const [referralCode,referralStats] = await Promise.all([getOrCreateReferralCode(userId),getReferralStats(userId)]);
+  return <>
+    {referralStats.invitedCount > 0 && (
+      <div className="panel">
+        <h2>招待実績</h2>
+        <dl className="stats">
+          <div><dt>招待</dt><dd>{referralStats.invitedCount}人</dd></div>
+          <div><dt>登録</dt><dd>{referralStats.signupCount}人</dd></div>
+          <div><dt>Activated</dt><dd>{referralStats.activatedCount}人</dd></div>
+          <div><dt>紹介経由の成立</dt><dd>{referralStats.referredMatchCount}件</dd></div>
+        </dl>
+      </div>
+    )}
+    {hasUnfilledMeal && <p className="notice">まだ人数が集まっていない募集があります。友達を誘うと成立しやすくなります。</p>}
+    <ReferralShare inviteUrl={`${appUrl()}/invite/${referralCode}`} text={`「俺は誰かと飯が食いたい！」使ってみない？\n\n${appUrl()}/invite/${referralCode}`} />
+  </>;
+}
+
 export default async function MyPage() {
-  // userIdはセッションから即座に分かる(currentUserIdはリクエスト単位でキャッシュされ重複コストなし)ため、
-  // getMyPageData()の重いクエリ群を待たずに、お気に入り/紹介コード/紹介実績の取得も同時に始める
-  // (以前はgetMyPageData()完了→お気に入り取得開始、という2段階のwaterfallになっていた)。
   const userId = await currentUserId();
   if (!userId) redirect('/login?next=%2Fmypage');
-  const [data, favoriteIds, referralCode, referralStats] = await Promise.all([
-    getMyPageData(userId),
-    getFavoriteMealIds(userId),
-    getOrCreateReferralCode(userId),
-    getReferralStats(userId),
-  ]);
+  const data = await getMyPageData(userId);
   if (!data.onboardingCompletedAt) redirect('/onboarding');
-  const upcoming = data.matches.filter(m => m.status === 'ACTIVE');
+  const upcoming = data.matches;
   const lastHostedMeal = data.hostedMeals[0] ?? null;
-  const favoriteMeals = favoriteIds.length ? await getMealsByIds(favoriteIds) : [];
   // まだ人数が集まっていない(＝成立していない)自分の募集があるかどうか。招待CTAの文脈判定に使う。
   const hasUnfilledMeal = data.hostedMeals.some(meal => meal.status === 'OPEN');
 
@@ -44,22 +64,7 @@ export default async function MyPage() {
         <Link className="btn secondary" href={`/meals?area=${encodeURIComponent(lastHostedMeal.area)}`}>前回と似た募集を探す</Link>
       </div>
     </div>}
-    {favoriteMeals.length > 0 && <>
-      <div className="section-heading"><h2>あとで見る</h2></div>
-      <div className="meal-grid">{favoriteMeals.map(meal => <MealCard key={meal.id} meal={meal} />)}</div>
-    </>}
-    {referralStats.invitedCount > 0 && (
-      <div className="panel">
-        <h2>招待実績</h2>
-        <dl className="stats">
-          <div><dt>招待</dt><dd>{referralStats.invitedCount}人</dd></div>
-          <div><dt>登録</dt><dd>{referralStats.signupCount}人</dd></div>
-          <div><dt>Activated</dt><dd>{referralStats.activatedCount}人</dd></div>
-          <div><dt>紹介経由の成立</dt><dd>{referralStats.referredMatchCount}件</dd></div>
-        </dl>
-      </div>
-    )}
-    {hasUnfilledMeal && <p className="notice">まだ人数が集まっていない募集があります。友達を誘うと成立しやすくなります。</p>}
-    <ReferralShare inviteUrl={`${appUrl()}/invite/${referralCode}`} text={`「俺は誰かと飯が食いたい！」使ってみない？\n\n${appUrl()}/invite/${referralCode}`} />
+    <Suspense fallback={<p className="muted" role="status">あとで見るを読み込んでいます…</p>}><FavoriteMeals userId={userId}/></Suspense>
+    <Suspense fallback={<p className="muted" role="status">招待情報を読み込んでいます…</p>}><MyReferral userId={userId} hasUnfilledMeal={hasUnfilledMeal}/></Suspense>
   </section>;
 }

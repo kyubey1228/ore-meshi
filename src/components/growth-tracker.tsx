@@ -2,7 +2,8 @@
 import { useEffect } from 'react';
 import Link, { type LinkProps } from 'next/link';
 import type { AnchorHTMLAttributes } from 'react';
-import type { GrowthEvent, GrowthEventPayload } from '@/lib/growth-events';
+import { buildGrowthEvent, type GrowthEvent, type GrowthEventPayload } from '@/lib/growth-events';
+import { enqueueAnalyticsEvent } from '@/lib/analytics-queue';
 
 export type { GrowthEvent, GrowthEventPayload } from '@/lib/growth-events';
 
@@ -34,40 +35,18 @@ function getUtmParams(): { source?: string; utmMedium?: string; utmCampaign?: st
 
 export function trackGrowthEvent(eventType: GrowthEvent, payload: GrowthEventPayload = {}) {
   const utm = getUtmParams();
-  void fetch('/api/growth-events', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      eventType,
-      source: payload.source ?? utm.source,
-      utmMedium: payload.utmMedium ?? utm.utmMedium,
-      utmCampaign: payload.utmCampaign ?? utm.utmCampaign,
-      referrer: payload.referrer ?? (typeof document !== 'undefined' ? document.referrer || undefined : undefined),
-      ...payload,
-    }),
-  }).catch(() => {});
+  const referrer = typeof document !== 'undefined' ? document.referrer || undefined : undefined;
+  enqueueAnalyticsEvent('/api/growth-events', buildGrowthEvent(eventType, payload, { ...utm, referrer }));
 }
 
-// 一覧表示時のimpression計測など、同時に複数件のイベントを送る場合はカードの数だけfetchを発行せず、
-// 必ずこちらで1リクエストにまとめる(ブラウザの同時接続数を圧迫し、他の読み込みを遅くするため)。
+// 単発イベントも同じキューへ集約し、一覧以外の初期表示イベントもまとめて送る。
 export function trackGrowthEventsBatch(events: { eventType: GrowthEvent; payload?: GrowthEventPayload }[]) {
-  if (events.length === 0) return;
+  if (!events.length) return;
   const utm = getUtmParams();
   const referrer = typeof document !== 'undefined' ? document.referrer || undefined : undefined;
-  void fetch('/api/growth-events', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      events: events.map(({ eventType, payload = {} }) => ({
-        eventType,
-        source: payload.source ?? utm.source,
-        utmMedium: payload.utmMedium ?? utm.utmMedium,
-        utmCampaign: payload.utmCampaign ?? utm.utmCampaign,
-        referrer: payload.referrer ?? referrer,
-        ...payload,
-      })),
-    }),
-  }).catch(() => {});
+  for (const { eventType, payload = {} } of events) {
+    enqueueAnalyticsEvent('/api/growth-events', buildGrowthEvent(eventType, payload, { ...utm, referrer }));
+  }
 }
 
 export function GrowthTracker({ eventType, ...payload }: { eventType: GrowthEvent } & GrowthEventPayload) {

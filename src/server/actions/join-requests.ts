@@ -28,14 +28,21 @@ export async function createJoinRequest(input: unknown) {return perform(async us
     const earliestCandidateDate=meal.candidates.map(c=>c.date).sort((a,b)=>a.getTime()-b.getTime())[0]??null;
     return {requestId:request.id,hostId:meal.hostId,mealId:meal.id,mealTitle:meal.title,mealArea:meal.area,mealGenre:meal.genre,maxParticipants:meal.maxParticipants,earliestCandidateDate,requestedAt:scheduledAt(candidate.date.toISOString().slice(0,10),candidate.startTime)};
   });
-  await createNotification({
-    userId:outcome.hostId,type:'JOIN_REQUEST_RECEIVED',
-    title:'あなたの募集に参加希望が届きました',body:`「${outcome.mealTitle}」に参加希望が届きました。\n\n日時: ${outcome.requestedAt.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})}\n場所: ${outcome.mealArea}\n\n参加希望者を確認してください。`,
-    mealId:outcome.mealId,dedupeKey:`JOIN_REQUEST_RECEIVED:${outcome.requestId}`,
-  });
-  await checkReferralActivation(userId);
-  const matchingIntent=await findMatchingActiveIntent(userId,{area:outcome.mealArea,genre:outcome.mealGenre,maxParticipants:outcome.maxParticipants,earliestCandidateDate:outcome.earliestCandidateDate});
-  if(matchingIntent)await recordGrowthEvent('DEMAND_JOIN_STARTED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true});
+  // The saved request is the prerequisite for all three independent follow-ups.
+  // Await every branch even if one fails, especially notification email delivery.
+  const followUps=await Promise.allSettled([
+    createNotification({
+      userId:outcome.hostId,type:'JOIN_REQUEST_RECEIVED',
+      title:'あなたの募集に参加希望が届きました',body:`「${outcome.mealTitle}」に参加希望が届きました。\n\n日時: ${outcome.requestedAt.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})}\n場所: ${outcome.mealArea}\n\n参加希望者を確認してください。`,
+      mealId:outcome.mealId,dedupeKey:`JOIN_REQUEST_RECEIVED:${outcome.requestId}`,
+    }),
+    checkReferralActivation(userId),
+    (async()=>{
+      const matchingIntent=await findMatchingActiveIntent(userId,{area:outcome.mealArea,genre:outcome.mealGenre,maxParticipants:outcome.maxParticipants,earliestCandidateDate:outcome.earliestCandidateDate});
+      if(matchingIntent)await recordGrowthEvent('DEMAND_JOIN_STARTED',{recruitmentId:outcome.mealId,area:outcome.mealArea,loggedIn:true});
+    })(),
+  ]);
+  for(const result of followUps)if(result.status==='rejected')throw result.reason;
 });}
 export async function cancelJoinRequest(input: unknown) {return perform(async userId=>{
   const id=idSchema.parse(input);

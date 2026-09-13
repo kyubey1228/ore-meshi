@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { currentBusinessMembership, getBusinessActivationFunnel, getBusinessCompletionStats, getBusinessDashboard, getBusinessMonthlyStats } from '@/server/business';
+import { currentBusinessMembership, getBusinessActivationFunnel, getBusinessCompletionStats, getBusinessRecentCampaigns, getBusinessMonthlyStats } from '@/server/business';
 import { getBusinessPlanForMembership, getBusinessPricingCatalog } from '@/server/billing';
 import { BusinessPaymentBanner } from '@/components/business-payment-banner';
 import { BusinessStatusBadge } from '@/components/business-status-badge';
@@ -13,7 +13,7 @@ const PLAN_LABEL_JA = { FREE: 'フリープラン', STANDARD: 'スタンダー�
 
 type RecentItem = { kind: string; id: string; title: string; status: BusinessCampaignStatus; createdAt: Date; href: string };
 
-function recentItems(data: Awaited<ReturnType<typeof getBusinessDashboard>>): RecentItem[] {
+function recentItems(data: Awaited<ReturnType<typeof getBusinessRecentCampaigns>>): RecentItem[] {
   return [
     ...data.sponsoredMeals.map(item => ({ kind: 'スポンサー飯', id: item.id, title: item.title, status: item.status, createdAt: item.createdAt, href: '/business/sponsored-meals' })),
     ...data.seatCampaigns.map(item => ({ kind: '空席スポンサー', id: item.id, title: `今、席空いてます：${item.restaurantName}`, status: item.status, createdAt: item.createdAt, href: '/business/seats' })),
@@ -31,7 +31,7 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
   if (membership.businessAccount.status === 'SUSPENDED') return <section className="section narrow"><h1>店舗管理を一時停止しています。</h1><p className="notice">詳しくは運営へお問い合わせください。</p><Link className="btn" href="/business/contact">問い合わせる</Link></section>;
   const query = await searchParams;
   const [data, plan, monthly, completion, catalog, funnel] = await measurePerformance('BUSINESS', 'dashboard aggregates', () => Promise.all([
-    getBusinessDashboard(membership),
+    getBusinessRecentCampaigns(membership),
     getBusinessPlanForMembership(membership),
     getBusinessMonthlyStats(membership.businessAccountId),
     getBusinessCompletionStats(membership.businessAccountId),
@@ -54,7 +54,7 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
       <div className="section-heading">
         <div>
           <span className="eyebrow orange">BUSINESS TABLE</span>
-          <h1>{data.membership.businessAccount.name}</h1>
+          <h1>{membership.businessAccount.name}</h1>
           <p className="muted">{PLAN_LABEL_JA[plan]} · Xで飯を呼ぶ。</p>
         </div>
         <Link className="btn secondary" href="/business/billing">プランを見る</Link>

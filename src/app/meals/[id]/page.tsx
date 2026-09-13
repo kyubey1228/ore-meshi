@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { getFavoriteMealIds, getHostTrustStats, getMealById, getMealShareData } from '@/lib/data';
+import { isFavoriteMeal, getHostTrustStats, getMealById, getPublicMealById, getUserDiningTypes } from '@/lib/data';
 import { currentUserId } from '@/server/auth';
 import { getOrCreateReferralCode } from '@/server/referral';
 import { resolveJoinIntent } from '@/server/actions/join-intent';
@@ -29,7 +30,7 @@ import { isUgcStyle } from '@/lib/ugc';
 type Props={params:Promise<{id:string}>;searchParams:Promise<{ref?:string}>};
 const alt='「俺は誰かと飯が食いたい！」の飯募集';
 export async function generateMetadata({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{ugc_style?:string}>}):Promise<Metadata>{
-  const [{id},query]=await Promise.all([params,searchParams]);const meal=await getMealShareData(id);
+  const [{id},query]=await Promise.all([params,searchParams]);const meal=await getPublicMealById(id);
   if(!meal)return {title:'飯募集が見つかりません'};
   const remaining=remainingSlots(meal);
   const state=meal.status==='OPEN'?(remaining===1?'あと1人！':`あと${remaining}人`):meal.status==='MATCHED'?'飯、決まった。':mealStatusLabels[meal.status];
@@ -47,6 +48,22 @@ export async function generateMetadata({params,searchParams}:{params:Promise<{id
     openGraph:{title:meal.title,description,type:'website',url,images:[{url:image,width:1200,height:630,alt}]},
     twitter:{card:'summary_large_image',title:meal.title,description,images:[image]},
   };
+}
+
+async function HostTrust({host,mealId}:{host:NonNullable<Awaited<ReturnType<typeof getPublicMealById>>>['host'];mealId:string}){
+  const stats=await getHostTrustStats(host.id);
+  const badges=computeHostTrustBadges({...stats,bio:host.bio,image:host.image});
+  return <TrustBadges badges={badges} mealId={mealId}/>;
+}
+
+async function HostDiningTypes({hostId}:{hostId:string}){
+  return <TagPills tags={await getUserDiningTypes(hostId)} limit={5}/>;
+}
+
+async function MealReferral({userId,mealId,text}:{userId:string;mealId:string;text:string}){
+  const code=await getOrCreateReferralCode(userId);
+  const inviteUrl=`${appUrl()}/invite/${code}`;
+  return <ReferralShare inviteUrl={inviteUrl} mealId={mealId} text={`${text}\n\n${inviteUrl}`}/>;
 }
 
 export default async function MealDetail({params,searchParams}:Props){
@@ -73,18 +90,15 @@ export default async function MealDetail({params,searchParams}:Props){
   }:null;
 
   const canJoin=!host&&!myRequest&&meal.status==='OPEN';
-  const [intent,hostStats,favoriteIds,sessionKey,matchingDemandIntent]=await Promise.all([
+  const [intent,favorite,sessionKey,matchingDemandIntent]=await Promise.all([
     userId&&canJoin?resolveJoinIntent(id,true):Promise.resolve(null),
-    getHostTrustStats(meal.hostId),
-    userId?getFavoriteMealIds(userId):Promise.resolve([]),
+    userId?isFavoriteMeal(userId,id):Promise.resolve(false),
     (async()=>(await cookies()).get('ore_growth_session')?.value??id)(),
     userId&&canJoin?findMatchingActiveIntent(userId,{area:meal.area,genre:meal.genre,maxParticipants:meal.maxParticipants,earliestCandidateDate:meal.candidates.map(c=>c.date).sort((a,b)=>a.getTime()-b.getTime())[0]??null}):Promise.resolve(null),
   ]);
-  const trustBadges=computeHostTrustBadges({hostedCount:hostStats.hostedCount,completedCount:hostStats.completedCount,bio:meal.host.bio,image:meal.host.image,diningTypeCount:meal.host.diningTypes.length});
   const experimentVariants=remaining===1?['A','B','C']:['A','B'];
   const variant=canJoin&&!userId?getVariant('join_cta',sessionKey,experimentVariants):null;
   const canInvite=Boolean(userId)&&meal.status==='OPEN'&&(host||myRequest?.status==='ACCEPTED');
-  const inviteCode=canInvite?await getOrCreateReferralCode(userId as string):null;
 
   return <section className="section narrow">
     <GrowthTracker eventType="RECRUITMENT_VIEWED" recruitmentId={id} area={meal.area} foodCategory={meal.genre??undefined} loggedIn={Boolean(userId)}/>
@@ -95,14 +109,14 @@ export default async function MealDetail({params,searchParams}:Props){
     <Link className="text-link" href="/meals">← 飯の一覧へ</Link>
     {canJoin&&<MobileStickyJoinBar area={meal.area} when={firstCandidate?candidateLabel(firstCandidate):'日時調整中'} remaining={remaining} participantCount={meal._count.joinRequests+1}/>}
     <div className={`panel detail${meal.status==='OPEN'&&remaining===1?' last-slot':''}`}>
-      <div className="row between wrap"><span className="tag">{mealStatusLabels[meal.status]}</span><FavoriteButton mealId={id} loggedIn={Boolean(userId)} initialFavorite={favoriteIds.includes(id)}/></div>
+      <div className="row between wrap"><span className="tag">{mealStatusLabels[meal.status]}</span><FavoriteButton mealId={id} loggedIn={Boolean(userId)} initialFavorite={favorite}/></div>
       {meal.status==='OPEN'&&remaining===1&&<p className="last-slot-label">🔥 あと1人で飯決定！</p>}
       {matchingDemandIntent&&<p className="last-slot-label">🎯 あなたの「行きたい」条件と一致しています</p>}
       {meal.sponsoredMeals[0]&&<p className="last-slot-label">PR · 提供:{meal.sponsoredMeals[0].sponsorName}{meal.sponsoredMeals[0].benefit?` / ${meal.sponsoredMeals[0].benefit}`:''}</p>}
       <h1>{meal.title}</h1>
       <TagPills tags={meal.purposes.map(({purpose})=>purpose)} tone="orange"/>
       <TrackedLink className="person" eventType="HOST_PROFILE_OPENED" payload={{recruitmentId:id}} href={`/users/${meal.host.id}`}><UserAvatar user={meal.host}/><span><strong>{meal.host.displayName}</strong><small>@{meal.host.twitterUsername}</small></span></TrackedLink>
-      <TrustBadges badges={trustBadges} mealId={id}/>
+      <Suspense fallback={null}><HostTrust host={meal.host} mealId={id}/></Suspense>
       <p className="pre-wrap">{meal.description}</p>
       <dl className="detail-list">
         <div><dt>どこ</dt><dd>{meal.area}{meal.restaurant&&` / ${meal.restaurant}`}</dd></div>
@@ -132,7 +146,7 @@ export default async function MealDetail({params,searchParams}:Props){
       <MealShareActions mealId={id} area={meal.area} genre={meal.genre} text={shareText} url={url}/>
     </div>
 
-    {inviteCode&&<ReferralShare inviteUrl={`${appUrl()}/invite/${inviteCode}`} mealId={id} text={`${remaining>0?`あと${remaining}人で集まります！`:''}\n${firstCandidate?`${candidateLabel(firstCandidate)}〜`:''}${meal.area}で${meal.title}\n\n${appUrl()}/invite/${inviteCode}`}/>}
+    {canInvite&&userId&&<Suspense fallback={null}><MealReferral userId={userId} mealId={id} text={`${remaining>0?`あと${remaining}人で集まります！`:''}\n${firstCandidate?`${candidateLabel(firstCandidate)}〜`:''}${meal.area}で${meal.title}`}/></Suspense>}
 
     {host&&<JoinRequestsPanel mealId={id}><div className="panel">
       <h2>参加希望が届いてるよ</h2>
@@ -146,6 +160,6 @@ export default async function MealDetail({params,searchParams}:Props){
       {meal.status!=='CANCELLED'&&<><hr/><MealStatusControls id={id}/><p className="muted">募集のキャンセルと、成立済みの飯の予定のキャンセルは別の操作です。</p></>}
     </div></JoinRequestsPanel>}
     {!host&&myRequest&&<div className="panel"><h2>{requestStatusLabels[myRequest.status]}</h2><p>{candidateLabel(myRequest.candidate)}</p>{myRequest.status==='PENDING'&&<CancelRequest id={myRequest.id}/>}</div>}
-    <div className="panel"><h2>募集している人</h2><DiningTypePills relations={meal.host.diningTypes} limit={5}/><p>{meal.host.bio||'気軽に一緒に飯いこう。'}</p><TrackedLink className="text-link" eventType="HOST_PROFILE_OPENED" payload={{recruitmentId:id}} href={`/users/${meal.host.id}`}>プロフィールを見る →</TrackedLink></div>
+    <div className="panel"><h2>募集している人</h2><Suspense fallback={null}><HostDiningTypes hostId={meal.host.id}/></Suspense><p>{meal.host.bio||'気軽に一緒に飯いこう。'}</p><TrackedLink className="text-link" eventType="HOST_PROFILE_OPENED" payload={{recruitmentId:id}} href={`/users/${meal.host.id}`}>プロフィールを見る →</TrackedLink></div>
   </section>;
 }

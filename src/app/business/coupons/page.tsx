@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { currentBusinessMembership, getBusinessDashboard } from '@/server/business';
+import { currentBusinessMembership } from '@/server/business';
+import { prisma } from '@/lib/prisma';
 import { BusinessStatusBadge } from '@/components/business-status-badge';
 import { BusinessEmptyState } from '@/components/business-empty-state';
 
@@ -12,7 +13,11 @@ export const metadata = { title: 'クーポン' };
 export default async function CouponsList() {
   const membership = await currentBusinessMembership();
   if (!membership) redirect('/business/onboarding');
-  const data = await getBusinessDashboard();
+  const coupons = await prisma.coupon.findMany({
+    where: { businessAccountId: membership.businessAccountId },
+    orderBy: { createdAt: 'desc' }, take: 20,
+    select: { id: true, status: true, title: true, restaurantName: true, benefit: true, expiresAt: true, _count: { select: { redemptions: true } } },
+  });
 
   return (
     <section className="section">
@@ -22,12 +27,12 @@ export default async function CouponsList() {
         <Link className="btn" href="/business/coupons/new">クーポン作る</Link>
       </div>
 
-      {!data.coupons.length && (
+      {!coupons.length && (
         <BusinessEmptyState icon="🎟️" message="クーポンはまだありません。" ctaHref="/business/coupons/new" ctaLabel="クーポンを作る" />
       )}
 
       <div className="dashboard-grid">
-        {data.coupons.map(item => (
+        {coupons.map(item => (
           <article className="panel" key={item.id}>
             <BusinessStatusBadge status={item.status} />
             <h2>{item.title}</h2>

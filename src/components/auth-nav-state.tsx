@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 
 type AccountState = { signedIn: boolean; count: number };
 let accountStateRequest: Promise<AccountState> | undefined;
-function loadAccountState() {
+export function loadAccountState() {
   return accountStateRequest ??= fetch('/api/notifications/unread', { cache: 'no-store' })
     .then(response => response.ok ? response.json() as Promise<AccountState> : { signedIn: false, count: 0 })
     .catch(error => { accountStateRequest = undefined; throw error; });

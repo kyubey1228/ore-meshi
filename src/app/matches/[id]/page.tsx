@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { getMatchById } from '@/lib/data';
 import { requirePageUser } from '@/server/auth';
@@ -11,14 +12,18 @@ import { ReferralShare } from '@/components/referral-share';
 import { getOrCreateReferralCode } from '@/server/referral';
 import { appUrl } from '@/lib/social';
 
+async function CompletedMealReferral({userId,mealId}:{userId:string;mealId:string}) {
+  const referralCode = await getOrCreateReferralCode(userId);
+  const inviteUrl = `${appUrl()}/invite/${referralCode}`;
+  return <ReferralShare inviteUrl={inviteUrl} mealId={mealId} text={`「俺は誰かと飯が食いたい！」で飯に行ってきました。\n\n${inviteUrl}`} />;
+}
+
 export default async function MatchPage({ params }: { params: Promise<{ id: string }> }) {
-  const userId = await requirePageUser();
-  const { id } = await params;
+  const [userId, { id }] = await Promise.all([requirePageUser(), params]);
   const match = await getMatchById(id);
   if (!match) notFound();
   const canComplete = match.scheduledAt <= new Date();
   const isHost = match.meal.hostId === userId;
-  const referralCode = match.status === 'COMPLETED' ? await getOrCreateReferralCode(userId) : null;
   return <section className="section narrow">
     <Link className="text-link" href="/mypage">← マイページへ</Link>
     <div className="panel detail">
@@ -38,6 +43,6 @@ export default async function MatchPage({ params }: { params: Promise<{ id: stri
         {isHost && <Link className="btn secondary" href={`/meals/new?repeat=${match.mealId}`}>同じ条件でまた募集する</Link>}
       </div>
     </div>}
-    {referralCode && <ReferralShare inviteUrl={`${appUrl()}/invite/${referralCode}`} mealId={match.mealId} text={`「俺は誰かと飯が食いたい！」で飯に行ってきました。\n\n${appUrl()}/invite/${referralCode}`} />}
+    {match.status === 'COMPLETED' && <Suspense fallback={null}><CompletedMealReferral userId={userId} mealId={match.mealId}/></Suspense>}
   </section>;
 }

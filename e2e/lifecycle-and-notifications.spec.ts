@@ -14,23 +14,27 @@ test.describe.serial('Capacity境界・reload後の状態維持・成立通知',
     user3Id = (await db.user.findUniqueOrThrow({ where: { twitterId: users.user3.twitterId } })).id;
   });
 
-  test('募集を作成し、3人が参加希望を送る', async ({ browser }) => {
+  test('店舗オーナーが定員3人の募集を作成する', async ({ browser }) => {
     const hostContext = await browser.newContext({ storageState: statePath('business') });
     const hostPage = await hostContext.newPage();
     mealTitle = `${E2E_PREFIX}-容量境界飯-${Date.now()}`;
     mealUrl = await createMeal(hostPage, mealTitle, 3);
     mealId = mealUrl.split('/').filter(Boolean).pop()!;
     await hostContext.close();
+  });
 
-    for (const key of ['user1', 'user2', 'user3'] as const) {
+  // 4人分の操作合計を単一の45秒に詰めず、ユーザーごとの応答を検証する。
+  // 参加成功の10秒制限とserial実行順は維持し、遅い操作を特定できるようにする。
+  for (const key of ['user1', 'user2', 'user3'] as const) {
+    test(`${key}が参加希望を送り、保存結果を確認する`, async ({ browser }) => {
       const context = await browser.newContext({ storageState: statePath(key) });
       const page = await context.newPage();
       await page.goto(mealUrl);
       await page.getByRole('button', { name: 'この募集に参加する' }).click();
       await expect(page.getByRole('status')).toContainText('保存しました');
       await context.close();
-    }
-  });
+    });
+  }
 
   test('Capacity境界: 定員を満たすまで承認すると、残りのPENDINGは自動的にREJECTEDになる', async ({ browser }) => {
     const context = await browser.newContext({ storageState: statePath('business') });

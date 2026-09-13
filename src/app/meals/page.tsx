@@ -17,6 +17,10 @@ import { getEmptyStateData } from '@/server/empty-state';
 import { buildEmptyState } from '@/lib/empty-state';
 import { EMPTY_STATE_VARIANTS, getVariant } from '@/lib/experiments';
 import { appUrl } from '@/lib/social';
+import { getPublicMealFeed } from '@/server/public-meal-feed';
+import { isDefaultMealQuery } from '@/server/meal-feed-query';
+import { getMealPage } from '@/server/meal-page';
+import { MAX_MEAL_PAGE, mealPageNumber, mealPageHref } from '@/lib/meal-pagination';
 
 const description='現在募集中の飯を探して参加できます。今日の「うまい」を誰かと。';
 const shareImage=`${appUrl()}/api/ugc/invite?style=gag`;
@@ -36,7 +40,7 @@ const QUICK_FILTERS: { key: 'when'|'remaining'; value: string; label: string }[]
 
 function quickFilterHref(raw: Record<string,string|string[]|undefined>, key: 'when'|'remaining', value: string){
   const params=new URLSearchParams();
-  for(const [k,v] of Object.entries(raw)){if(typeof v==='string'&&k!==key)params.set(k,v);}
+  for(const [k,v] of Object.entries(raw)){if(typeof v==='string'&&k!==key&&k!=='page')params.set(k,v);}
   const isActive=raw[key]===value;
   if(!isActive)params.set(key,value);
   return `/meals${params.toString()?`?${params.toString()}`:''}`;
@@ -45,36 +49,43 @@ function quickFilterHref(raw: Record<string,string|string[]|undefined>, key: 'wh
 async function MealsContent({raw}:{raw:Record<string,string|string[]|undefined>}){
   const parsed=filterSchema.safeParse(raw);
   const filters=parsed.success?parsed.data:{};
+  const page=mealPageNumber(raw.page);
   // 公開データは認証結果に依存しない。Authの完了を待つwaterfallを作らず同時にDB/cache取得を開始する。
   const userIdPromise=currentUserId();
-  const publicDataPromise=Promise.all([
+  const defaultFeedPromise=process.env.DATABASE_URL&&isDefaultMealQuery(filters)?getPublicMealFeed():null;
+  const publicDataPromise=defaultFeedPromise?defaultFeedPromise.then(feed=>[
+    feed.purposes,
+    feed.sponsoredMeals.filter(item=>item.startsAt>new Date()),
+    feed.seatCampaigns.filter(item=>item.endsAt>new Date()),
+    feed.areaOptionsGrouped,
+  ] as const):Promise.all([
     getMealPurposes(),
     getActiveStandaloneSponsoredMeals(filters.area),
     getActiveSeatCampaigns(filters.area),
     getAreaOptionsGrouped(),
   ]);
-  const mealCandidatesPromise=getMealCandidates(filters,40);
+  const mealCandidatesPromise=getMealPage(filters,page);
   const userId=await userIdPromise;
-  const [personalized,publicData,mealCandidates]=await Promise.all([
-    userId?getMealPersonalization(userId):Promise.resolve({preferences:{preferredArea:null,preferredGenres:[] as string[]},recommendationProfile:null}),
+  const [publicData,mealPage]=await Promise.all([
     publicDataPromise,
     mealCandidatesPromise,
   ]);
-  const {preferences,recommendationProfile}=personalized;
+  const {meals:mealCandidates,hasNext}=mealPage;
   const [purposes,sponsoredMeals,seatCampaigns,areaOptionsGrouped]=publicData;
-  const context={preferredArea:preferences?.preferredArea,preferredGenres:preferences?.preferredGenres,recommendationProfile};
-  const ranked=rankMeals(mealCandidates,{...context,now:new Date()});
+  const ranked=rankMeals(mealCandidates,{now:new Date()});
   const meals=ranked.map(result=>result.meal);
   const [recentMeals,emptyData]=meals.length
     ? [[],null]
-    : await Promise.all([getRecentOpenMeals(4),getEmptyStateData(filters.area)]);
+    : defaultFeedPromise
+      ? await defaultFeedPromise.then(feed=>[feed.meals.filter(meal=>!meal.deadline||meal.deadline>new Date()).slice(0,4),feed.emptyData] as const)
+      : await Promise.all([getRecentOpenMeals(4),getEmptyStateData(filters.area)]);
   const emptyVariant=getVariant('meal_empty_state',userId??filters.area??'anonymous',EMPTY_STATE_VARIANTS);
   const emptyCopy=emptyData?buildEmptyState({...emptyData,area:filters.area,variant:emptyVariant}):null;
   const createHref=userId?'/meals/new':`/login?next=${encodeURIComponent('/meals/new')}`;
-  const personalizationEnabled=Boolean(preferences?.preferredArea||preferences?.preferredGenres.length);
   const rankedItems=ranked.map(result=>({meal:result.meal,reason:result.reason}));
 
   return <>
+    <span hidden data-meal-viewer={userId?'signed-in':'guest'}/>
     {!userId&&<GrowthTracker eventType="SIGNUP_CTA_VIEW" source="meals_list_create_cta" loggedIn={false}/>}
     <GrowthTracker eventType="QUICK_FILTER_VIEW" loggedIn={Boolean(userId)}/>
     <RecentlyViewedSection loggedIn={Boolean(userId)}/>
@@ -94,9 +105,15 @@ async function MealsContent({raw}:{raw:Record<string,string|string[]|undefined>}
       <button className="btn">飯を探す</button><Link className="text-link" href="/meals">リセット</Link>
     </form>
     {!parsed.success&&<p role="alert" className="error">検索条件を確認してください。</p>}
-    <p className="muted">{meals.length}件の飯 {personalizationEnabled?'· あなた向けにおすすめ順で表示':'· あと1人、開催日時、新着順を考慮して表示'}</p>
-    {meals.length?<RankedMealGrid items={rankedItems} personalizationEnabled={personalizationEnabled}/>:(
-      <div className="empty">
+    <p className="muted">新着順で12件ずつ表示 · 各ページ内でおすすめ順に並べ替え</p>
+    {meals.length?(userId
+      ? <Suspense fallback={<MealResults items={rankedItems} personalizationEnabled={false} trackImpressions={false}/>}>
+          <PersonalizedMealResults meals={mealCandidates} userId={userId}/>
+        </Suspense>
+      : <MealResults items={rankedItems} personalizationEnabled={false}/>
+    ):(
+      <div className="empty" data-meal-results="empty">
+        <p className="muted">0件の飯</p>
         <GrowthTracker eventType="EMPTY_STATE_VIEWED" area={filters.area} variant={emptyVariant} source="meals_list" loggedIn={Boolean(userId)}/>
         <span className="empty-icon">🍚</span>
         <p>{emptyCopy?.headline}</p>
@@ -105,9 +122,28 @@ async function MealsContent({raw}:{raw:Record<string,string|string[]|undefined>}
         <div className="row center wrap"><TrackedLink className="btn" eventType="EMPTY_STATE_CTA_CLICKED" payload={{area:filters.area,loggedIn:Boolean(userId),source:'create',variant:emptyVariant}} href={createHref}>{emptyCopy?.primaryLabel} →</TrackedLink><TrackedLink className="btn secondary" eventType="EMPTY_STATE_CTA_CLICKED" payload={{area:filters.area,loggedIn:Boolean(userId),source:'demand',variant:emptyVariant}} href="/demand">希望を登録</TrackedLink></div>
       </div>
     )}
+    {(page>1||hasNext)&&<nav aria-label="募集一覧のページ切り替え" className="row wrap">
+      {page>1&&<Link className="btn secondary" href={mealPageHref(raw,page-1)} rel="prev">前の12件</Link>}
+      <span aria-current="page">{page}ページ目</span>
+      {hasNext&&page<MAX_MEAL_PAGE&&<Link className="btn secondary" href={mealPageHref(raw,page+1)} rel="next">次の12件</Link>}
+    </nav>}
     {recentMeals.length>0&&<div className="section-heading"><h2>新着の募集</h2></div>}
     {recentMeals.length>0&&<div className="meal-grid">{recentMeals.map(meal=><MealCard key={meal.id} meal={meal}/>)}</div>}
   </>;
+}
+
+type MealCandidates = Awaited<ReturnType<typeof getMealCandidates>>;
+function MealResults({items,personalizationEnabled,trackImpressions=true}:{items:{meal:MealCandidates[number];reason:string}[];personalizationEnabled:boolean;trackImpressions?:boolean}){
+  return <div data-meal-results="ready">
+    <p className="muted">{items.length}件の飯 {personalizationEnabled?'· あなた向けにおすすめ順で表示':'· あと1人、開催日時、新着順を考慮して表示'}</p>
+    <RankedMealGrid items={items} personalizationEnabled={personalizationEnabled} trackImpressions={trackImpressions}/>
+  </div>;
+}
+
+async function PersonalizedMealResults({meals,userId}:{meals:MealCandidates;userId:string}){
+  const {preferences,recommendationProfile}=await getMealPersonalization(userId);
+  const ranked=rankMeals(meals,{...preferences,recommendationProfile,now:new Date()});
+  return <MealResults items={ranked.map(({meal,reason})=>({meal,reason}))} personalizationEnabled={Boolean(preferences.preferredArea||preferences.preferredGenres.length)}/>;
 }
 
 function MealsLoading(){return <div className="panel" role="status"><p className="muted">🍚 募集を読み込んでいます…</p></div>;}

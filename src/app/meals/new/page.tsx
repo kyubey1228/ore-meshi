@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { requirePageUser } from '@/server/auth';
-import { MealForm } from '@/components/meal-form';
-import { QuickPostForm } from '@/components/quick-post-form';
+import { MealComposer } from '@/components/meal-composer';
 import { getAreaOptions, getFrequentPostingPattern, getMealPurposes } from '@/lib/data';
 import { prisma } from '@/lib/prisma';
 
@@ -11,11 +10,11 @@ export default async function NewMeal({searchParams}:{searchParams:Promise<{mode
   const userId = await requirePageUser('/meals/new');
   const { mode, repeat } = await searchParams;
   const detailed = mode === 'detailed';
-  const purposes = detailed ? await getMealPurposes() : [];
-  const [frequentPattern, repeatMeal, areaOptions] = await Promise.all([
+  const [frequentPattern, repeatMeal, areaOptions, purposes] = await Promise.all([
     !detailed ? getFrequentPostingPattern(userId) : Promise.resolve(null),
     repeat ? prisma.meal.findFirst({ where: { id: repeat, hostId: userId }, select: { area: true, genre: true, maxParticipants: true, description: true } }) : Promise.resolve(null),
     getAreaOptions(),
+    detailed ? getMealPurposes() : Promise.resolve([]),
   ]);
 
   return <section className="section narrow">
@@ -24,6 +23,6 @@ export default async function NewMeal({searchParams}:{searchParams:Promise<{mode
       <Link className={`tag-pill${!detailed?' orange-pill':''}`} href="/meals/new">かんたん（30秒）</Link>
       <Link className={`tag-pill${detailed?' orange-pill':''}`} href="/meals/new?mode=detailed">くわしく作る</Link>
     </div>
-    {detailed ? <MealForm purposes={purposes} areaOptions={areaOptions}/> : <QuickPostForm frequentPattern={frequentPattern} areaOptions={areaOptions} repeatDefaults={repeatMeal?{area:repeatMeal.area,genre:repeatMeal.genre??'',maxParticipants:repeatMeal.maxParticipants,description:repeatMeal.description??''}:undefined}/>}
+    <MealComposer detailed={detailed} purposes={purposes} frequentPattern={frequentPattern} areaOptions={areaOptions} repeatDefaults={repeatMeal?{area:repeatMeal.area,genre:repeatMeal.genre??'',maxParticipants:repeatMeal.maxParticipants,description:repeatMeal.description??''}:undefined}/>
   </section>;
 }

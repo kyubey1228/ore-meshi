@@ -24,7 +24,7 @@ export function UgcStylePicker({ value, onChange, previewUrl }: {
       <div className="ugc-preview-frame">
         {/* SNSカードと画像保存に使う生成APIそのものを表示し、見た目の差異を防ぐ。 */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img key={previewUrl} src={previewUrl} alt={`「${selectedStyle.label}」のシェア画像プレビュー`} width={1200} height={630} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
+        <img key={previewUrl} src={previewUrl} alt={`「${selectedStyle.label}」のシェア画像プレビュー`} width={1200} height={630} loading="lazy" decoding="async" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
       </div>
       <div className="ugc-options" role="radiogroup" aria-label="シェア画像のテイスト">
         {UGC_STYLES.map(style => (

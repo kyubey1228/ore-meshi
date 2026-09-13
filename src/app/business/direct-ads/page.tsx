@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { currentBusinessMembership, getBusinessDashboard } from '@/server/business';
+import { currentBusinessMembership } from '@/server/business';
+import { prisma } from '@/lib/prisma';
 import { getBusinessCapabilities } from '@/server/billing';
 import { BusinessDirectAdForm } from '@/components/business-direct-ad-form';
 import { BusinessStatusBadge } from '@/components/business-status-badge';
@@ -11,8 +12,12 @@ export const metadata = { title: '企業広告(Direct Ad)' };
 export default async function BusinessDirectAds() {
   const membership = await currentBusinessMembership();
   if (!membership) redirect('/business/onboarding');
-  const [data, capabilities] = await Promise.all([
-    getBusinessDashboard(),
+  const [directAds, capabilities] = await Promise.all([
+    prisma.directAdCampaign.findMany({
+      where: { businessAccountId: membership.businessAccountId },
+      orderBy: { createdAt: 'desc' }, take: 20,
+      select: { id: true, status: true, title: true, advertiserName: true },
+    }),
     getBusinessCapabilities(membership.businessAccountId),
   ]);
 
@@ -29,11 +34,11 @@ export default async function BusinessDirectAds() {
       )}
       {capabilities.canCreateDirectAd && <BusinessDirectAdForm businessAccountId={membership.businessAccountId} />}
 
-      {!data.directAds.length && (
+      {!directAds.length && (
         <BusinessEmptyState icon="📢" message="企業広告はまだありません。" />
       )}
       <div className="dashboard-grid">
-        {data.directAds.map(ad => (
+        {directAds.map(ad => (
           <article className="panel" key={ad.id}>
             <BusinessStatusBadge status={ad.status} />
             <h2>{ad.title}</h2>

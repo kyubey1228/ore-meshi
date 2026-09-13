@@ -1,7 +1,7 @@
 import 'server-only';
 import { prisma } from '@/lib/prisma';
 import type { NotificationCategory, NotificationType } from '@prisma/client';
-import { recordGrowthEvent } from '@/server/growth';
+import { recordGrowthEvent, recordGrowthEvents } from '@/server/growth';
 import { sendEmail } from '@/server/email';
 import { appUrl } from '@/lib/social';
 import { measurePerformance } from '@/lib/performance';
@@ -64,24 +64,31 @@ async function createNotificationInternal(params: CreateNotificationInput) {
     const notification = await prisma.notification.create({
       data: { userId: params.userId, type: params.type, category, title: params.title, body: params.body, mealId: params.mealId, dedupeKey: params.dedupeKey },
     });
-    await recordGrowthEvent('NOTIFICATION_CREATED', { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type });
-    await recordGrowthEvent('NOTIFICATION_SENT', { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type, channel: 'IN_APP' });
-
     const emailAllowed = params.businessEmailAllowed === true || (TRANSACTIONAL_EMAIL_TYPES.includes(params.type)
       ? (preference?.emailTransactionalEnabled ?? true)
       : MARKETING_EMAIL_TYPES.includes(params.type) && (preference?.emailMarketingEnabled ?? false));
-    if (emailAllowed && user?.email) {
-      const link = `${appUrl()}/api/notifications/${notification.id}/click`;
-      const template = buildEmailTemplate({ subject: params.title, body: params.body, ctaLabel: notificationCta(params.type), ctaUrl: link });
-      const result = await sendEmail({ to: user.email, ...template });
-      if (result.ok) {
-        await prisma.notification.update({ where: { id: notification.id }, data: { emailSentAt: new Date() } });
-        await recordGrowthEvent('EMAIL_SENT', { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type });
-      } else {
-        await prisma.notification.update({ where: { id: notification.id }, data: { emailFailedAt: new Date() } });
-        await recordGrowthEvent('EMAIL_DELIVERY_FAILED', { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type });
-      }
-    }
+    // Persist the in-app notification first. Analytics and email are independent,
+    // but both remain awaited so finishing the request never abandons delivery.
+    const followUps = await Promise.allSettled([
+      recordGrowthEvents([
+        { eventType: 'NOTIFICATION_CREATED', data: { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type } },
+        { eventType: 'NOTIFICATION_SENT', data: { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type, channel: 'IN_APP' } },
+      ]),
+      (async () => {
+        if (!emailAllowed || !user?.email) return;
+        const link = `${appUrl()}/api/notifications/${notification.id}/click`;
+        const template = buildEmailTemplate({ subject: params.title, body: params.body, ctaLabel: notificationCta(params.type), ctaUrl: link });
+        const result = await sendEmail({ to: user.email, ...template });
+        if (result.ok) {
+          await prisma.notification.update({ where: { id: notification.id }, data: { emailSentAt: new Date() } });
+          await recordGrowthEvent('EMAIL_SENT', { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type });
+        } else {
+          await prisma.notification.update({ where: { id: notification.id }, data: { emailFailedAt: new Date() } });
+          await recordGrowthEvent('EMAIL_DELIVERY_FAILED', { recruitmentId: params.mealId, loggedIn: true, notificationType: params.type });
+        }
+      })(),
+    ]);
+    for (const result of followUps) if (result.status === 'rejected') throw result.reason;
     return notification;
   } catch (error) {
     console.error('createNotification failed (likely duplicate, safe to ignore)', error instanceof Error ? error.name : 'UnknownError');

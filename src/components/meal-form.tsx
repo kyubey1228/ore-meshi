@@ -2,23 +2,24 @@
 import { useState, useTransition } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Calendar } from '@/components/ui/calendar';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { TagSelector, type SelectableTag } from '@/components/tag-selector';
 import { createMeal, updateMeal } from '@/server/actions/meals';
 import { mealSchema } from '@/validators';
 import { paymentLabels, candidateLabel } from '@/lib/format';
 import { MealDraftPreview } from '@/components/meal-draft-preview';
 import { AreaDatalist } from '@/components/area-datalist';
-import { MealShareActions } from '@/components/meal-share-actions';
-import { mealUrl } from '@/lib/social';
+import type { CreatedMeal } from '@/components/meal-created-dialog';
 import type { z } from 'zod';
 
 type Fields={title:string;area:string;budgetMin:number;budgetMax:number;maxParticipants:number;paymentType:'SPLIT'|'HOST_PAYS'|'GUEST_PAYS';restaurant:string;description:string;genre:string;alcohol:string;smoking:string;ageCondition:string;deadline:string;purposeIds:string[]};
 type Candidate=z.infer<typeof mealSchema>['candidates'][number];
-type CreatedMeal={href:string;mealId:string;title:string;area:string;genre:string;when:string;budget:string;payment:string;remaining:number;purposeLabels:string[]};
+const MealCreatedDialog = dynamic(() => import('@/components/meal-created-dialog').then(module => module.MealCreatedDialog), {
+  loading: () => <p role="status">募集を作成しました。共有画面を読み込んでいます…</p>,
+});
 const presets=[{name:'朝',start:'06:00',end:'10:00'},{name:'昼',start:'11:00',end:'14:00'},{name:'夕方',start:'15:00',end:'18:00'},{name:'夜',start:'18:00',end:'22:00'},{name:'深夜',start:'22:00',end:'02:00'}];
 
 export function MealForm({initial,id,purposes,areaOptions=[]}:{initial?:Fields & {candidates:Candidate[]};id?:string;purposes:SelectableTag[];areaOptions?:string[]}){
@@ -106,25 +107,6 @@ export function MealForm({initial,id,purposes,areaOptions=[]}:{initial?:Fields &
         <button className="btn wide" disabled={pending}>{pending?'保存中…':id?'募集を更新する':'この飯、一緒に行く人！'}</button>
       </fieldset>
     </form>
-    <Dialog open={Boolean(createdMeal)} onOpenChange={open=>{if(!open)goToMeal();}}>
-      <DialogContent showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>募集を作成しました！</DialogTitle>
-          <DialogDescription>シェアすると、一緒に行ける人が見つかりやすくなります。</DialogDescription>
-        </DialogHeader>
-        {createdMeal && (
-          <MealShareActions
-            mealId={createdMeal.mealId}
-            area={createdMeal.area}
-            genre={createdMeal.genre||null}
-            url={mealUrl(createdMeal.mealId)}
-            text={['誰か飯いこ','',createdMeal.when,`${createdMeal.area}で${createdMeal.title}`,'',`${createdMeal.budget} / ${createdMeal.payment} / あと${createdMeal.remaining}人`,createdMeal.purposeLabels.map(label=>`#${label.replace(/\s/g,'')}`).join(' '),'','#誰か飯いこ',mealUrl(createdMeal.mealId)].filter((line,index,all)=>line!==''||all[index-1]!=='').join('\n')}
-          />
-        )}
-        <DialogFooter>
-          <button type="button" className="btn secondary" onClick={goToMeal}>あとで・募集ページへ</button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    {createdMeal && <MealCreatedDialog meal={createdMeal} onContinue={goToMeal} />}
   </>;
 }

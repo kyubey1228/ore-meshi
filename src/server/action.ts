@@ -2,8 +2,10 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { currentUserId } from '@/server/auth';
+import { refreshPublicMealFeed } from '@/server/public-meal-feed';
 export type ActionResult = { ok: boolean; message: string; href?: string; justMatched?: boolean; matchId?: string; meal?: {title:string;area:string;scheduledAt:string;participantCount:number} };
 export class UserError extends Error {}
 export function ensure(condition: unknown, message = 'この操作を行う権限がありません。'): asserts condition { if (!condition) throw new UserError(message); }
@@ -23,6 +25,12 @@ export async function perform(fn: (userId: string) => Promise<string | void | Ac
     const id = await currentUserId(); ensure(id, 'Twitter/Xでログインしてください。');
     const value = await fn(id);
     revalidatePath('/', 'layout');
+    // Refresh the public read model without making successful mutations wait for
+    // another remote DB round trip. Existing action validation stays authoritative.
+    after(async () => {
+      try { await refreshPublicMealFeed(); }
+      catch (error) { console.error('Public meal feed refresh failed', error instanceof Error ? error.name : 'UnknownError'); }
+    });
     return {ok:true,message:'保存しました。',...(typeof value==='string'?{href:value}:value??{})};
   } catch(error) {
     if(error instanceof UserError) return {ok:false,message:error.message};

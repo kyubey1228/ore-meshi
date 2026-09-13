@@ -27,6 +27,23 @@ npm run dev
 
 `http://localhost:3000` を開きます。品質チェックは `npm run lint`、`npm run typecheck`、`npm test`、`npm run build` です。
 
+### 表示パフォーマンスの確認
+
+公開ページのHTTP初期応答・見出しHTML到着・全体受信時間は `bash scripts/perf-measure.sh https://対象ホスト`、ビルド後のページ用JSサイズは `node scripts/measure-page-bundles.mjs` で確認できます。HTTP受信時間やJSサイズは、ブラウザーでの描画指標（LCP等）とは別の測定です。
+
+募集一覧の実カード到着を100ms基準で測る場合は `node scripts/measure-meal-first-data.mjs http://127.0.0.1:3201` を使います。公開一覧は起動時に準備して20秒ごとに更新するため、サーバー初期化完了後に計測してください。準備時間・条件付き検索・障害時の制約は [計測結果](docs/performance-20260913.md) に記載しています。
+
+今回追加した画面別取得・スマホの詳細投稿・公開募集lookup・12件単位のページ分割の回帰テストは、分離されたテスト用スキーマで実行します。
+
+```bash
+npm run test:e2e:isolated -- display-performance.spec.ts
+# 本番モードでの検証（コード変更後は再ビルド）
+npm run build
+E2E_PRODUCTION=true npm run test:e2e:isolated -- display-performance.spec.ts meal-pagination.spec.ts
+```
+
+`test:e2e:isolated` は `e2e_ore_meshi` スキーマのテストデータを初期化します。本番モードでは `.next/standalone` に静的アセットを配置して起動します。`NEXT_PUBLIC_*` はビルド時に固定されるため、外部共有URLまで確認する場合はビルド時にもテスト用URLを設定してください。
+
 ## 環境変数
 
 ```env

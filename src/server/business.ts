@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { prisma } from '@/lib/prisma';
 import { currentUserId } from '@/server/auth';
 import { ensure } from '@/server/action';
@@ -13,29 +14,25 @@ export async function businessPostingMembership(businessAccountId?:string){
   ensure(membership.role==='OWNER'||membership.role==='ADMIN'||membership.canPostToSocial,'Xで宣伝する権限がありません。');
   return membership;
 }
-export async function currentBusinessMembership(){
+export const currentBusinessMembership=cache(async function currentBusinessMembership(){
   const userId=await currentUserId();if(!userId)return null;
   return prisma.businessMember.findFirst({where:{userId,OR:[{role:{in:['OWNER','ADMIN']}},{canPostToSocial:true}]},include:{businessAccount:true},orderBy:{createdAt:'asc'}});
-}
+});
 export async function getBusinessTeam(businessAccountId:string){
   return prisma.businessMember.findMany({where:{businessAccountId},orderBy:{createdAt:'asc'},include:{user:{select:{displayName:true,twitterUsername:true,image:true}}}});
 }
 type DashboardMembership = NonNullable<Awaited<ReturnType<typeof currentBusinessMembership>>>;
-export async function getBusinessDashboard(verifiedMembership?: DashboardMembership){
-  // ページで既に取得・検証したmembershipを再利用し、同じBusinessMemberを再検索しない。
-  const membership=verifiedMembership??await businessPostingMembership();const id=membership.businessAccountId;const now=new Date();
-  const [sponsoredMeals,sponsorCampaigns,seatCampaigns,coupons,directAds,socialAccounts,settings,recentPosts,analytics]=await Promise.all([
-    prisma.sponsoredMeal.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
-    prisma.sponsorCampaign.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
-    prisma.seatCampaign.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
-    prisma.coupon.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20,include:{_count:{select:{redemptions:true}}}}),
-    prisma.directAdCampaign.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
-    prisma.businessSocialAccount.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'}}),
-    prisma.businessSocialPostSetting.findFirst({where:{businessAccountId:id}}),
-    prisma.socialPost.findMany({where:{businessAccountId:id},orderBy:{createdAt:'desc'},take:20}),
-    prisma.referralEvent.groupBy({by:['eventType'],where:{businessAccountId:id},_count:{_all:true}}),
+export async function getBusinessRecentCampaigns(membership: DashboardMembership){
+  // Dashboardは全体の最新3件だけを表示する。各種類も3件あれば全体の上位3件を保てる。
+  const where = { businessAccountId: membership.businessAccountId };
+  const select = { id: true, title: true, status: true, createdAt: true } as const;
+  const [sponsoredMeals, seatCampaigns, coupons, directAds] = await Promise.all([
+    prisma.sponsoredMeal.findMany({ where, orderBy: { createdAt: 'desc' }, take: 3, select }),
+    prisma.seatCampaign.findMany({ where, orderBy: { createdAt: 'desc' }, take: 3, select: { id: true, restaurantName: true, status: true, createdAt: true } }),
+    prisma.coupon.findMany({ where, orderBy: { createdAt: 'desc' }, take: 3, select }),
+    prisma.directAdCampaign.findMany({ where, orderBy: { createdAt: 'desc' }, take: 3, select }),
   ]);
-  return {membership,now,sponsoredMeals,sponsorCampaigns,seatCampaigns,coupons,directAds,socialAccounts,settings,recentPosts,analytics};
+  return { sponsoredMeals, seatCampaigns, coupons, directAds };
 }
 
 export async function getBusinessMonthlyStats(businessAccountId:string){
@@ -49,23 +46,20 @@ export async function getBusinessMonthlyStats(businessAccountId:string){
 // 新規イベント種別は追加せず、既存のBusinessAccount.status/ReferralEvent/SponsorOrderから
 // 「その店舗がこれまでに一度でも到達したか」を全期間で判定する(月次集計のgetBusinessMonthlyStatsとは別)。
 export async function getBusinessActivationFunnel(businessAccountId:string){
-  const [account,sponsoredMealCount,seatCampaignCount,eventCounts,paidOrderCount]=await Promise.all([
-    prisma.businessAccount.findUnique({where:{id:businessAccountId},select:{status:true}}),
-    prisma.sponsoredMeal.count({where:{businessAccountId}}),
-    prisma.seatCampaign.count({where:{businessAccountId}}),
+  const [account,eventCounts]=await Promise.all([
+    prisma.businessAccount.findUnique({where:{id:businessAccountId},select:{status:true,_count:{select:{sponsoredMeals:true,seatCampaigns:true,sponsorOrders:{where:{status:'PAID'}}}}}}),
     prisma.referralEvent.groupBy({by:['eventType'],where:{businessAccountId},_count:{_all:true}}),
-    prisma.sponsorOrder.count({where:{businessAccountId,status:'PAID'}}),
   ]);
   const counts=Object.fromEntries(eventCounts.map(row=>[row.eventType,row._count._all]));
   return {
     signedUp:true,
     approved:account?.status==='ACTIVE',
-    firstAvailabilityPosted:sponsoredMealCount>0||seatCampaignCount>0,
+    firstAvailabilityPosted:(account?._count.sponsoredMeals??0)>0||(account?._count.seatCampaigns??0)>0,
     firstView:(counts.X_VISIT??0)>0,
     firstUserAction:(counts.JOIN_REQUEST??0)>0,
     firstMatch:(counts.MATCHED??0)>0,
     firstCompleted:(counts.COMPLETED??0)>0,
-    firstPaidPurchase:paidOrderCount>0,
+    firstPaidPurchase:(account?._count.sponsorOrders??0)>0,
   };
 }
 
@@ -98,13 +92,15 @@ export async function getBusinessSavingsThisMonth(businessAccountId:string){
   return {sponsoredMealCount,seatCampaignCount,savingsYen:savings};
 }
 
-export async function getCampaignShareData(kind:CampaignKind,id:string):Promise<CampaignShareData|null>{
-  if(kind==='SPONSORED_MEAL'){const item=await prisma.sponsoredMeal.findUnique({where:{id},include:{businessAccount:true,meal:{select:{maxParticipants:true,_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}}}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:item.title,restaurantName:item.restaurantName,area:item.area,startsAt:item.startsAt,participantLimit:item.participantLimit,remaining:item.meal?Math.max(0,item.meal.maxParticipants-(item.meal._count.joinRequests+1)):item.remainingSlots,benefit:item.benefit,description:item.description,status:item.status};}
-  if(kind==='SPONSOR_CAMPAIGN'){const item=await prisma.sponsorCampaign.findUnique({where:{id},include:{businessAccount:true}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:item.title,restaurantName:item.restaurantName,area:item.area,startsAt:item.startsAt,participantLimit:item.participantLimit,remaining:item.remainingSlots,benefit:item.benefit,status:item.status};}
-  if(kind==='SEAT_CAMPAIGN'){const item=await prisma.seatCampaign.findUnique({where:{id},include:{businessAccount:true}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:'今、席空いてます',restaurantName:item.restaurantName,area:item.area,endsAt:item.endsAt,remaining:item.remainingSeats,benefit:item.benefit,description:item.description,status:item.status};}
-  if(kind==='COUPON'){const item=await prisma.coupon.findUnique({where:{id},include:{businessAccount:true}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:item.title,restaurantName:item.restaurantName,area:item.area,endsAt:item.expiresAt,benefit:item.benefit,status:item.status};}
-  const item=await prisma.directAdCampaign.findUnique({where:{id},include:{businessAccount:true}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.advertiserName,title:item.title,restaurantName:item.businessAccount.name,area:item.businessAccount.area??'',startsAt:item.startsAt,endsAt:item.endsAt,description:item.description,status:item.status};
-}
+// Metadataと本文で同じレコードを読むため、Reactの同一render内だけで重複排除する。
+// リクエストを跨ぐキャッシュは使わず、残席・公開状態は毎リクエスト確認する。
+export const getCampaignShareData = cache(async function getCampaignShareData(kind:CampaignKind,id:string):Promise<CampaignShareData|null>{
+  if(kind==='SPONSORED_MEAL'){const item=await prisma.sponsoredMeal.findUnique({where:{id},include:{businessAccount:{select:{name:true}},meal:{select:{maxParticipants:true,_count:{select:{joinRequests:{where:{status:'ACCEPTED'}}}}}}}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:item.title,restaurantName:item.restaurantName,area:item.area,startsAt:item.startsAt,participantLimit:item.participantLimit,remaining:item.meal?Math.max(0,item.meal.maxParticipants-(item.meal._count.joinRequests+1)):item.remainingSlots,benefit:item.benefit,description:item.description,status:item.status};}
+  if(kind==='SPONSOR_CAMPAIGN'){const item=await prisma.sponsorCampaign.findUnique({where:{id},include:{businessAccount:{select:{name:true}}}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:item.title,restaurantName:item.restaurantName,area:item.area,startsAt:item.startsAt,participantLimit:item.participantLimit,remaining:item.remainingSlots,benefit:item.benefit,status:item.status};}
+  if(kind==='SEAT_CAMPAIGN'){const item=await prisma.seatCampaign.findUnique({where:{id},include:{businessAccount:{select:{name:true}}}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:'今、席空いてます',restaurantName:item.restaurantName,area:item.area,endsAt:item.endsAt,remaining:item.remainingSeats,benefit:item.benefit,description:item.description,status:item.status};}
+  if(kind==='COUPON'){const item=await prisma.coupon.findUnique({where:{id},include:{businessAccount:{select:{name:true}}}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.businessAccount.name,title:item.title,restaurantName:item.restaurantName,area:item.area,endsAt:item.expiresAt,benefit:item.benefit,status:item.status};}
+  const item=await prisma.directAdCampaign.findUnique({where:{id},include:{businessAccount:{select:{name:true,area:true}}}});return item&&{id:item.id,kind,businessAccountId:item.businessAccountId,businessName:item.advertiserName,title:item.title,restaurantName:item.businessAccount.name,area:item.businessAccount.area??'',startsAt:item.startsAt,endsAt:item.endsAt,description:item.description,status:item.status};
+});
 
 export async function getReferralAttribution(){
   const eventId=(await cookies()).get('ore_business_referral')?.value;if(!eventId)return null;

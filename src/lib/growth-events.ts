@@ -50,3 +50,26 @@ export type GrowthEventPayload = {
   utmMedium?: string;
   utmCampaign?: string;
 };
+
+const growthTextLimits: Record<string, number> = {
+  recruitmentId: 100, area: 80, foodCategory: 80, source: 100, referrer: 300,
+  shareType: 30, recommendationReason: 40, experimentName: 60, variant: 20,
+  notificationType: 40, channel: 20, utmMedium: 60, utmCampaign: 80,
+  utmContent: 80, utmTerm: 80,
+};
+
+// Keep a long inbound URL/UTM value from invalidating an otherwise valid batch.
+export function buildGrowthEvent(eventType: GrowthEvent, payload: GrowthEventPayload, attribution: Pick<GrowthEventPayload, 'source' | 'utmMedium' | 'utmCampaign' | 'referrer'>) {
+  const event = {
+    ...payload,
+    eventType,
+    source: payload.source ?? attribution.source,
+    utmMedium: payload.utmMedium ?? attribution.utmMedium,
+    utmCampaign: payload.utmCampaign ?? attribution.utmCampaign,
+    referrer: payload.referrer ?? attribution.referrer,
+  };
+  return Object.fromEntries(Object.entries(event).map(([key, value]) => [
+    key,
+    typeof value === 'string' && growthTextLimits[key] ? value.trim().slice(0, growthTextLimits[key]) : value,
+  ]));
+}

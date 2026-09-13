@@ -1,14 +1,16 @@
 import 'server-only';
 import { requireBillingMembership } from '@/server/billing/auth';
-import { getBusinessPlan } from '@/server/billing';
+import { getBusinessPlanForMembership } from '@/server/billing';
 import { getAreaGenreMatrix, MIN_BUSINESS_SAMPLE_SIZE, rankOpportunity } from '@/server/business-intelligence';
 
 // Business向けDemand Intelligence。Adminと同じ集計(getAreaGenreMatrix)を再利用しつつ、
 // プランに応じて開示範囲を変える(FREE=概要のみ/STANDARD=詳細/PRO=比較まで)。個人データは一切含めない。
 export async function getBusinessDemandIntelligence(businessAccountId: string, days: number) {
   const membership = await requireBillingMembership(businessAccountId);
-  const plan = await getBusinessPlan(membership.businessAccountId);
-  const cells = await getAreaGenreMatrix(days);
+  const [plan, cells] = await Promise.all([
+    getBusinessPlanForMembership(membership),
+    getAreaGenreMatrix(days),
+  ]);
   const sufficient = cells.filter(c => c.demandIntents + c.activeMeals >= MIN_BUSINESS_SAMPLE_SIZE);
 
   if (plan === 'FREE') {
