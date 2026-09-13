@@ -27,6 +27,7 @@ export function NotificationPreferenceForm({ preference, hasEmail }: { preferenc
           <div className="notice">
             <p>メールアドレスを登録すると、参加承認や飯の成立をアプリを開かなくてもメールで受け取れます。見逃したくない人におすすめです。</p>
             <Link className="btn secondary" href="/profile">メールアドレスを登録する →</Link>
+            <Link className="text-link" href="/email-notifications">くわしく見る</Link>
           </div>
         )}
       </ActionForm>
