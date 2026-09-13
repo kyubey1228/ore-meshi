@@ -20,9 +20,12 @@ export function ReferralShare({ inviteUrl, text, mealId, heading = '友達も誘
 
   useEffect(() => { trackGrowthEvent('REFERRAL_LINK_CREATED', { recruitmentId: mealId, loggedIn: true }); }, [mealId]);
 
-  function share(shareType: 'x' | 'line' | 'url_copy') {
+  function share(shareType: 'x' | 'line' | 'email' | 'url_copy') {
     trackGrowthEvent('RECRUITMENT_SHARED', { recruitmentId: mealId, shareType, loggedIn: true });
     if (shareType === 'x' || shareType === 'line') trackGrowthEvent('INVITE_SHARE_CLICKED', { recruitmentId: mealId, shareType, loggedIn: true });
+    // メール招待は「送信ボタンを押した」ことしか分からず実送信は確認できないが、招待"送信数"を
+    // 計測できる唯一のチャネルとして専用イベントで記録する(K-factor精度向上のため)。
+    if (shareType === 'email') trackGrowthEvent('INVITE_EMAIL_SENT', { recruitmentId: mealId, shareType, loggedIn: true });
   }
 
   async function copyUrl() {
@@ -52,6 +55,7 @@ export function ReferralShare({ inviteUrl, text, mealId, heading = '友達も誘
       <div className="share-actions">
         <a className="btn dark-btn" href={`https://x.com/intent/tweet?${new URLSearchParams({ text: styledText }).toString()}`} target="_blank" rel="noopener noreferrer" onClick={() => share('x')}>Xで誘う</a>
         <a className="btn line-btn" href={lineShareUrl(styledInviteUrl, styledText)} target="_blank" rel="noopener noreferrer" onClick={() => share('line')}>LINEで誘う</a>
+        <a className="btn secondary" href={`mailto:?subject=${encodeURIComponent('一緒に飯行かない？')}&body=${encodeURIComponent(styledText)}`} onClick={() => share('email')}>メールで誘う</a>
         <button className="btn secondary" type="button" onClick={copyUrl}>{copied ? 'コピーしました！' : '招待URLをコピー'}</button>
         {canShare && <button className="btn secondary" type="button" onClick={webShare}>共有する</button>}
         <a className="btn secondary" href={`${previewUrl}&download=1`} download>画像を保存</a>

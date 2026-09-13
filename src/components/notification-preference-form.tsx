@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { ActionForm } from '@/components/action-form';
 import { updateNotificationPreference } from '@/server/actions/notifications';
 
@@ -22,7 +23,12 @@ export function NotificationPreferenceForm({ preference, hasEmail }: { preferenc
         {hasEmail ? <>
           <label className="row"><input type="checkbox" name="emailTransactionalEnabled" defaultChecked={preference.emailTransactionalEnabled} />重要な通知をメールでも受け取る（参加承認・成立・締切間近など）</label>
           <label className="row"><input type="checkbox" name="emailMarketingEnabled" defaultChecked={preference.emailMarketingEnabled} />おすすめ・お知らせをメールでも受け取る</label>
-        </> : <p className="muted">メール通知を受け取るには、プロフィールでメールアドレスを登録してください。</p>}
+        </> : (
+          <div className="notice">
+            <p>メールアドレスを登録すると、参加承認や飯の成立をアプリを開かなくてもメールで受け取れます。見逃したくない人におすすめです。</p>
+            <Link className="btn secondary" href="/profile">メールアドレスを登録する →</Link>
+          </div>
+        )}
       </ActionForm>
     </div>
   );

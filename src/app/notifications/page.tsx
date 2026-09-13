@@ -26,7 +26,6 @@ export default async function NotificationsPage() {
         <div className="panel">{notifications.map(n => <NotificationRow key={n.id} notification={n} />)}</div>
       )}
       <NotificationPreferenceForm preference={preference} hasEmail={Boolean(user?.email)} />
-      <Link className="text-link" href="/profile">プロフィールでメールアドレスを設定 →</Link>
       <Link className="text-link" href="/mypage">← マイページへ</Link>
     </section>
   );
