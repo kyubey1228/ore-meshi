@@ -9,7 +9,9 @@ import { getSocialProofHighlight } from '@/server/social-proof';
 import { measurePerformance } from '@/lib/performance';
 import { HomeLoginHint } from '@/components/auth-nav-state';
 
-export const revalidate = 60;
+// Builders need not have DB connectivity or Prisma's native system libraries.
+// The public feed is warmed at runtime; its existing data cache remains in use.
+export const dynamic = 'force-dynamic';
 
 async function SocialProof() {
   const socialProof = await getSocialProofHighlight();
