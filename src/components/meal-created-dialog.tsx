@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MealShareActions } from '@/components/meal-share-actions';
@@ -23,6 +24,7 @@ export function MealCreatedDialog({ meal, onContinue }: { meal: CreatedMeal; onC
       <DialogFooter>
         <button type="button" className="btn secondary" onClick={onContinue}>あとで・募集ページへ</button>
       </DialogFooter>
+      <p className="muted">参加希望を見逃したくない方へ。<Link className="text-link" href="/email-notifications">メール登録すると便利！ →</Link></p>
     </DialogContent>
   </Dialog>;
 }

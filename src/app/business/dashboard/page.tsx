@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { EmailNotificationGuide } from '@/components/email-notification-guide';
 import { redirect } from 'next/navigation';
 import { currentBusinessMembership, getBusinessActivationFunnel, getBusinessCompletionStats, getBusinessRecentCampaigns, getBusinessMonthlyStats } from '@/server/business';
 import { getBusinessPlanForMembership, getBusinessPricingCatalog } from '@/server/billing';
@@ -60,6 +61,7 @@ export default async function BusinessDashboard({ searchParams }: { searchParams
         <Link className="btn secondary" href="/business/billing">プランを見る</Link>
       </div>
 
+      <EmailNotificationGuide business />
       {nextStep && (
         <div className="panel">
           <h2>次にやること</h2>

@@ -7,7 +7,7 @@ type Preference = { recruitmentEnabled: boolean; participationEnabled: boolean; 
 
 export function NotificationPreferenceForm({ preference, hasEmail }: { preference: Preference; hasEmail: boolean }) {
   return (
-    <div className="panel">
+    <div id="notification-settings" className="panel scroll-mt-24">
       <h2>通知設定</h2>
       <ActionForm label="設定を保存" action={data => updateNotificationPreference({
         recruitmentEnabled: data.get('recruitmentEnabled') === 'on',

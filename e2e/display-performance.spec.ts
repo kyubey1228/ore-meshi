@@ -34,9 +34,11 @@ test('表示最適化: スマホでも詳細フォームの遅延読込後に募
   await page.getByRole('button', { name: '夜 18:00〜22:00', exact: true }).click();
   await page.getByRole('button', { name: 'この飯、一緒に行く人！' }).click();
   await expect(page.getByRole('heading', { name: '募集を作成しました！' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('link', { name: 'メール登録すると便利！ →' })).toHaveAttribute('href', '/email-notifications');
   await expect(page.getByRole('link', { name: 'Xで共有' })).toBeVisible();
   await page.getByRole('button', { name: 'あとで・募集ページへ' }).click();
   await expect(page.getByRole('heading', { name: `${E2E_PREFIX}-詳細フォーム表示`, exact: true })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'メール通知のご案内' })).toBeVisible();
   await context.close();
 });
 

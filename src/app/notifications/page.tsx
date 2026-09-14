@@ -6,6 +6,7 @@ import { NotificationRow } from '@/components/notification-row';
 import { NotificationPreferenceForm } from '@/components/notification-preference-form';
 import { ActionForm } from '@/components/action-form';
 import { markAllNotificationsRead } from '@/server/actions/notifications';
+import { EmailNotificationGuide } from '@/components/email-notification-guide';
 
 export const metadata = { title: '通知' };
 
@@ -20,6 +21,7 @@ export default async function NotificationsPage() {
         <h1>通知</h1>
         {unreadCount > 0 && <ActionForm label="すべて既読にする" action={markAllNotificationsRead} />}
       </div>
+      <EmailNotificationGuide hasEmail={Boolean(user?.email)} />
       {notifications.length === 0 ? (
         <div className="empty"><span className="empty-icon">🔔</span><p>通知はまだありません。募集や参加に動きがあるとここに届きます。</p></div>
       ) : (

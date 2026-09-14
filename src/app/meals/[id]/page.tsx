@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import Link from 'next/link';
+import { EmailNotificationGuide } from '@/components/email-notification-guide';
 import { notFound } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { isFavoriteMeal, getHostTrustStats, getMealById, getPublicMealById, getUserDiningTypes } from '@/lib/data';
@@ -148,6 +149,7 @@ export default async function MealDetail({params,searchParams}:Props){
 
     {canInvite&&userId&&<Suspense fallback={null}><MealReferral userId={userId} mealId={id} text={`${remaining>0?`あと${remaining}人で集まります！`:''}\n${firstCandidate?`${candidateLabel(firstCandidate)}〜`:''}${meal.area}で${meal.title}`}/></Suspense>}
 
+    {(host&&meal.status==='OPEN'||!host&&myRequest?.status==='PENDING')&&<EmailNotificationGuide />}
     {host&&<JoinRequestsPanel mealId={id}><div className="panel">
       <h2>参加希望が届いてるよ</h2>
       {meal.joinRequests.length===0&&<p className="muted">まだ参加希望はありません。のんびり待とう。</p>}

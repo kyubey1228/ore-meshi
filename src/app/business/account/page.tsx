@@ -7,6 +7,7 @@ import { UserAvatar } from '@/components/meal-card';
 import { LogoutButton } from '@/components/auth-buttons';
 import { prisma } from '@/lib/prisma';
 import { BusinessNotificationPreferenceForm } from '@/components/business-notification-preference-form';
+import { EmailNotificationGuide } from '@/components/email-notification-guide';
 
 const PLAN_LABEL_JA = { FREE: 'フリープラン', STANDARD: 'スタンダードプラン', PRO: 'PROプラン' } as const;
 const ROLE_LABEL_JA = { OWNER: 'オーナー', ADMIN: '管理者', STAFF: 'スタッフ' } as const;
@@ -36,6 +37,7 @@ export default async function BusinessAccountPage() {
         </div>
       </div>
 
+      <EmailNotificationGuide business />
       <BusinessNotificationPreferenceForm businessAccountId={membership.businessAccountId} initial={notificationPreference ?? { activityEnabled: true, campaignPerformanceEnabled: true, billingEnabled: true, growthTipsEnabled: true }} />
 
       <div className="panel">

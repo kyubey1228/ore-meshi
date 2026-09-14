@@ -30,7 +30,7 @@ export default function EmailNotificationsPage() {
         <p>メールが使われるのはこれらの通知だけです。おすすめ募集などのお知らせメールは別の設定になっていて、通知ページからいつでもON/OFFを切り替えられます。パスワードの入力や連携は必要ありません。</p>
       </div>
       <div className="hero-actions">
-        <Link className="btn" href="/profile">プロフィールでメールアドレスを登録する →</Link>
+        <Link className="btn" href="/profile#email">プロフィールでメールアドレスを登録する →</Link>
         <Link className="text-link" href="/notifications">通知設定を見る</Link>
       </div>
     </section>

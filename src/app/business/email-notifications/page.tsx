@@ -29,7 +29,7 @@ export default function BusinessEmailNotificationsPage() {
         <p>通知はOWNER・ADMIN権限のメンバーへ届きます。受け取るお知らせの種類は、店舗管理の「通知設定」からいつでも調整できます。</p>
       </div>
       <div className="hero-actions">
-        <Link className="btn" href="/profile">プロフィールでメールアドレスを登録する →</Link>
+        <Link className="btn" href="/profile#email">プロフィールでメールアドレスを登録する →</Link>
         <Link className="text-link" href="/business/dashboard">店舗管理へ戻る</Link>
       </div>
     </section>

@@ -13,7 +13,7 @@ export function BusinessNotificationPreferenceForm({ businessAccountId, initial 
     { key: 'billingEnabled', label: '契約・請求', description: 'プラン終了など契約上必要な案内を含みます' },
     { key: 'growthTipsEnabled', label: '飯を呼ぶヒント', description: '未掲載時の始め方や改善案' },
   ];
-  return <form className="panel" onSubmit={event => { event.preventDefault(); start(async () => { await updateBusinessNotificationPreference({ businessAccountId, ...values }); setMessage('保存しました'); }); }}>
+  return <form id="notification-settings" className="panel scroll-mt-24" onSubmit={event => { event.preventDefault(); start(async () => { await updateBusinessNotificationPreference({ businessAccountId, ...values }); setMessage('保存しました'); }); }}>
     <h2>店舗へのお知らせ</h2>
     {rows.map(row => <label className="checkbox-row" key={row.key}><input type="checkbox" checked={values[row.key]} onChange={event => setValues(current => ({ ...current, [row.key]: event.target.checked }))}/><span><strong>{row.label}</strong><small>{row.description}</small></span></label>)}
     <button className="btn" disabled={pending}>{pending ? '保存中…' : '設定を保存'}</button>{message && <p className="success">{message}</p>}
