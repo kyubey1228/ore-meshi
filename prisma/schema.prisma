@@ -276,6 +276,7 @@ model User {
   joinRequests           JoinRequest[]
   rescheduleVotes        RescheduleVote[]
   matchParticipants      MatchParticipant[]
+  chatMessages           MatchChatMessage[]
   rescheduleProposals    RescheduleProposal[]       @relation("RescheduleProposer")
   diningFeedbackSent     DiningFeedback[]           @relation("DiningFeedbackFrom")
   diningFeedbackReceived DiningFeedback[]           @relation("DiningFeedbackTo")
@@ -1418,11 +1419,27 @@ model Match {
   participants        MatchParticipant[]
   rescheduleProposals RescheduleProposal[]
   diningFeedbacks     DiningFeedback[]
+  chatMessages        MatchChatMessage[]
 
   @@index([mealId, status])
   @@index([candidateId])
   @@index([status, scheduledAt])
   @@index([status, completedAt])
+}
+
+model MatchChatMessage {
+  id              String   @id @default(cuid())
+  matchId         String
+  senderId        String
+  clientMessageId String
+  body            String
+  createdAt       DateTime @default(now())
+
+  match  Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sender User  @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, senderId, clientMessageId])
+  @@index([matchId, createdAt, id])
 }
 
 model MatchParticipant {

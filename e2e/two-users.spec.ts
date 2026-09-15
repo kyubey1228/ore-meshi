@@ -18,6 +18,10 @@ test.describe.serial('ユーザー1とユーザー2', () => {
   test('ユーザー1が承認して成立させる', async ({ browser }) => {
     const context = await browser.newContext({ storageState: statePath('user1') }); const page = await context.newPage(); await page.goto(mealUrl);
     await page.getByRole('button', { name: '一緒に行く' }).click();
-    await expect(page.getByRole('heading', { name: '飯、決まった。' })).toBeVisible({ timeout: 20_000 }); await context.close();
+    await expect(page.getByRole('heading', { name: '飯、決まった。' })).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('button', { name: '待ち合わせチャットへ' }).click();
+    await expect(page).toHaveURL(/\/matches\/[^/]+#chat$/);
+    await expect(page.getByRole('region', { name: '待ち合わせチャット' }).getByRole('button', { name: '送信する' })).toBeVisible();
+    await context.close();
   });
 });

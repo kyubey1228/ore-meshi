@@ -228,7 +228,7 @@ export async function getMyPageData(userId?: string){
 }
 export async function getMatchById(raw: string){
   const userId=await requirePageUser(); const id=idSchema.safeParse(raw);if(!id.success)return null;
-  return prisma.match.findFirst({where:{id:id.data,participants:{some:{userId}}},select:{id:true,mealId:true,status:true,scheduledAt:true,meal:{select:{title:true,area:true,restaurant:true,hostId:true}},participants:{select:{userId:true,user:{select:publicUser}}},rescheduleProposals:{orderBy:{createdAt:'desc'},select:{id:true,proposedAt:true,proposerId:true,status:true,proposer:{select:{displayName:true}},votes:{select:{userId:true}}}},diningFeedbacks:{where:{fromUserId:userId},select:{toUserId:true}}}});
+  return prisma.match.findFirst({where:{id:id.data,participants:{some:{userId}}},select:{id:true,mealId:true,status:true,scheduledAt:true,meal:{select:{title:true,area:true,restaurant:true,hostId:true,status:true}},participants:{select:{userId:true,user:{select:publicUser}}},rescheduleProposals:{orderBy:{createdAt:'desc'},select:{id:true,proposedAt:true,proposerId:true,status:true,proposer:{select:{displayName:true}},votes:{select:{userId:true}}}},diningFeedbacks:{where:{fromUserId:userId},select:{toUserId:true}}}});
 }
 export async function getDiningHistory(){
   const userId=await requirePageUser();

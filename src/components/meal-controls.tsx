@@ -38,7 +38,8 @@ export function JoinRequestsPanel({ mealId, children }: { mealId: string; childr
           <DialogTitle>飯、決まった。</DialogTitle>
           <DialogDescription>{result?.meal && <>{new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(new Date(result.meal.scheduledAt))}<br />{result.meal.area} · {result.meal.title}<br /><strong>{result.meal.participantCount}人で行くことになりました。</strong></>}</DialogDescription>
         </DialogHeader>
-        <DialogFooter><button type="button" className="btn secondary" onClick={reportOnX}>Xで報告する</button><button type="button" className="btn" onClick={viewPlan}>予定を見る</button></DialogFooter>
+        <p className="muted">待ち合わせチャットが開きました。集合場所や目印を参加者に伝えましょう。</p>
+        <DialogFooter><button type="button" className="btn secondary" onClick={reportOnX}>Xで報告する</button><button type="button" className="btn secondary" onClick={viewPlan}>予定を見る</button><button type="button" className="btn" onClick={() => { if (result?.matchId) router.push(`/matches/${result.matchId}#chat`); }}>待ち合わせチャットへ</button></DialogFooter>
       </DialogContent>
     </Dialog>
   </MatchedContext.Provider>;

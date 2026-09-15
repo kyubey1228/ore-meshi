@@ -130,6 +130,7 @@ export default async function MealDetail({params,searchParams}:Props){
         {[{label:'ジャンル',value:meal.genre},{label:'お酒',value:meal.alcohol},{label:'たばこ',value:meal.smoking},{label:'年齢条件',value:meal.ageCondition}].filter(value=>value.value).map(value=><div key={value.label}><dt>{value.label}</dt><dd>{value.value}</dd></div>)}
       </dl>
       {meal.matches.map(match=><Link className="btn" key={match.id} href={`/matches/${match.id}`}>飯の予定を見る →</Link>)}
+      {meal.status==='MATCHED'&&meal.matches.filter(match=>match.status==='ACTIVE').map(match=><Link className="btn secondary" key={`chat-${match.id}`} href={`/matches/${match.id}#chat`}>待ち合わせチャット →</Link>)}
     </div>
 
     {intent&&<JoinIntentConfirm token={intent.token} candidates={meal.candidates.map(candidate=>({id:candidate.id,label:candidateLabel(candidate)}))}/>}

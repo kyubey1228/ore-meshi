@@ -25,39 +25,40 @@ test('discountedPriceYenはパーセント割引後の円額を計算する(JPY�
   assert.equal(discountedPriceYen(5000, 10), 4500);
 });
 
+const rankingNow = new Date('2026-09-15T00:00:00Z');
 function baseMeal(overrides: Partial<RankableMeal> = {}): RankableMeal {
   return {
-    id: 'meal-1', area: '渋谷', genre: '焼肉', maxParticipants: 4, createdAt: new Date(),
-    host: { createdAt: new Date(), bio: null, image: null, diningTypes: [] },
+    id: 'meal-1', area: '渋谷', genre: '焼肉', maxParticipants: 4, createdAt: rankingNow,
+    host: { createdAt: rankingNow, bio: null, image: null, diningTypes: [] },
     candidates: [], _count: { joinRequests: 1 },
     ...overrides,
   };
 }
 
 test('スポンサーMealでなければsponsor boostは加点されない', () => {
-  const withoutSponsor = scoreMeal(baseMeal());
-  const withEmptySponsor = scoreMeal(baseMeal({ sponsoredMeals: [] }));
+  const withoutSponsor = scoreMeal(baseMeal(), { now: rankingNow });
+  const withEmptySponsor = scoreMeal(baseMeal({ sponsoredMeals: [] }), { now: rankingNow });
   assert.equal(withoutSponsor.score, withEmptySponsor.score);
 });
 
 test('FREEプランのスポンサーは基本ボーナスのみで、PROのようなLast Seat Boostは付かない', () => {
   const account = { planOverride: 'FREE' as const, subscription: null };
-  const scored = scoreMeal(baseMeal({ maxParticipants: 2, _count: { joinRequests: 0 }, sponsoredMeals: [{ businessAccount: account }] }));
-  const unsponsored = scoreMeal(baseMeal({ maxParticipants: 2, _count: { joinRequests: 0 } }));
+  const scored = scoreMeal(baseMeal({ maxParticipants: 2, _count: { joinRequests: 0 }, sponsoredMeals: [{ businessAccount: account }] }), { now: rankingNow });
+  const unsponsored = scoreMeal(baseMeal({ maxParticipants: 2, _count: { joinRequests: 0 } }), { now: rankingNow });
   assert.equal(scored.score - unsponsored.score, 15);
 });
 
 test('PROプランかつ残り1人の場合のみLast Seat Boostが加点される(PROでも満席でなければ加点されない)', () => {
   const account = { planOverride: 'PRO' as const, subscription: null };
-  const lastSlot = scoreMeal(baseMeal({ maxParticipants: 2, _count: { joinRequests: 0 }, sponsoredMeals: [{ businessAccount: account }] }));
-  const notLastSlot = scoreMeal(baseMeal({ maxParticipants: 4, _count: { joinRequests: 0 }, sponsoredMeals: [{ businessAccount: account }] }));
+  const lastSlot = scoreMeal(baseMeal({ maxParticipants: 2, _count: { joinRequests: 0 }, sponsoredMeals: [{ businessAccount: account }] }), { now: rankingNow });
+  const notLastSlot = scoreMeal(baseMeal({ maxParticipants: 4, _count: { joinRequests: 0 }, sponsoredMeals: [{ businessAccount: account }] }), { now: rankingNow });
   // lastSlot: remaining=1 → lastSlotBonus(50) + sponsorBonus(15+25=40)。notLastSlot: remaining=3 → sponsorBonus(15)のみ。
   assert.equal(lastSlot.score - notLastSlot.score, 50 + 40 - 15);
 });
 
 test('PROの店舗Boostはareaが実際に一致する場合のみ加点される(無条件の1位固定にはならない)', () => {
   const account = { planOverride: 'STANDARD' as const, subscription: null };
-  const matchingArea = scoreMeal(baseMeal({ sponsoredMeals: [{ businessAccount: account }] }), { preferredArea: '渋谷' });
-  const nonMatchingArea = scoreMeal(baseMeal({ sponsoredMeals: [{ businessAccount: account }] }), { preferredArea: '新宿' });
+  const matchingArea = scoreMeal(baseMeal({ sponsoredMeals: [{ businessAccount: account }] }), { preferredArea: '渋谷', now: rankingNow });
+  const nonMatchingArea = scoreMeal(baseMeal({ sponsoredMeals: [{ businessAccount: account }] }), { preferredArea: '新宿', now: rankingNow });
   assert.ok(matchingArea.score > nonMatchingArea.score);
 });
