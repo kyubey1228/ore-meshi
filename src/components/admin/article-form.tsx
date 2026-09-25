@@ -1,6 +1,7 @@
 import type { Article, ArticleCategory, ArticleTagRelation, ArticleTag } from '@prisma/client';
 import { ActionForm } from '@/components/action-form';
 import { saveArticle } from '@/server/actions/media';
+import { MediaImageUploader } from '@/components/admin/media-image-uploader';
 
 type Editable = Article & { category: ArticleCategory | null; tags: (ArticleTagRelation & { tag: ArticleTag })[] };
 export function ArticleForm({ article }: { article?: Editable | null }) {
@@ -25,12 +26,9 @@ export function ArticleForm({ article }: { article?: Editable | null }) {
       <label>SEO title<input name="seoTitle" maxLength={70} defaultValue={article?.seoTitle ?? ''} /></label>
       <label>SEO description<input name="seoDescription" maxLength={180} defaultValue={article?.seoDescription ?? ''} /></label>
       <label>canonical URL<input type="url" name="canonicalUrl" defaultValue={article?.canonicalUrl ?? ''} /></label>
-      <label>OG画像URL<input type="url" name="ogImage" defaultValue={article?.ogImage ?? ''} /></label>
-      <label>アイキャッチURL<input type="url" name="coverImage" defaultValue={article?.coverImage ?? ''} /></label>
       <label>画像alt<input name="coverImageAlt" maxLength={160} defaultValue={article?.coverImageAlt ?? ''} /></label>
-      <label>画像幅<input type="number" name="imageWidth" min="200" max="4000" defaultValue={article?.imageWidth ?? 1200} /></label>
-      <label>画像高さ<input type="number" name="imageHeight" min="200" max="4000" defaultValue={article?.imageHeight ?? 630} /></label>
     </div>
+    <div className="form-grid"><MediaImageUploader name="coverImage" label="アイキャッチ画像" purpose="cover" defaultValue={article?.coverImage ?? ''} includeDimensions defaultWidth={article?.imageWidth ?? 1200} defaultHeight={article?.imageHeight ?? 630}/><MediaImageUploader name="ogImage" label="OG画像" purpose="og" defaultValue={article?.ogImage ?? ''}/></div>
     <div className="row wrap"><label className="check-label"><input type="checkbox" name="featured" defaultChecked={article?.featured} /> おすすめ</label><label className="check-label"><input type="checkbox" name="noindex" defaultChecked={article?.noindex} /> noindex</label></div>
   </ActionForm>;
 }
