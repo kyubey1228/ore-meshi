@@ -23,7 +23,7 @@ export async function getMediaHome() {
     prisma.article.findMany({ where: { ...isPublishedArticle(), noindex: false }, include: includeArticle, orderBy: { publishedAt: 'desc' }, take: 8 }),
     prisma.article.findMany({ where: { ...isPublishedArticle(), noindex: false }, include: includeArticle, orderBy: [{ viewCount: 'desc' }, { publishedAt: 'desc' }], take: 4 }),
     prisma.article.findMany({ where: { ...isPublishedArticle(), noindex: false, featured: true }, include: includeArticle, orderBy: [{ priority: 'desc' }, { publishedAt: 'desc' }], take: 4 }),
-    prisma.articleCategory.findMany({ where: { articles: { some: { ...isPublishedArticle(), noindex: false } } }, orderBy: { name: 'asc' } }),
+    prisma.articleCategory.findMany({ where: { articles: { some: { ...isPublishedArticle(), noindex: false } } }, orderBy: [{ featured: 'desc' }, { trending: 'desc' }, { name: 'asc' }] }),
   ]);
   return { latest, popular, featured, categories };
 }

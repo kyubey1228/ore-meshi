@@ -2,6 +2,7 @@ import type { Article, ArticleCategory, ArticleTagRelation, ArticleTag } from '@
 import { ActionForm } from '@/components/action-form';
 import { saveArticle } from '@/server/actions/media';
 import { MediaImageUploader } from '@/components/admin/media-image-uploader';
+import { ArticleContentEditor } from '@/components/admin/article-content-editor';
 
 type Editable = Article & { category: ArticleCategory | null; tags: (ArticleTagRelation & { tag: ArticleTag })[] };
 export function ArticleForm({ article }: { article?: Editable | null }) {
@@ -21,7 +22,7 @@ export function ArticleForm({ article }: { article?: Editable | null }) {
       <label>優先度<input type="number" min="0" max="100" name="priority" defaultValue={article?.priority ?? 0} /></label>
     </div>
     <label>概要<textarea name="excerpt" maxLength={300} rows={3} defaultValue={article?.excerpt ?? ''} /></label>
-    <label>本文（Markdown）<textarea name="content" required minLength={20} rows={22} defaultValue={article?.content ?? ''} placeholder={'## 見出し\n本文 **太字** [リンク](/meals)\n\n- リスト'} /></label>
+    <label>本文（Markdown）<ArticleContentEditor defaultValue={article?.content ?? ''} /></label>
     <div className="form-grid">
       <label>SEO title<input name="seoTitle" maxLength={70} defaultValue={article?.seoTitle ?? ''} /></label>
       <label>SEO description<input name="seoDescription" maxLength={180} defaultValue={article?.seoDescription ?? ''} /></label>
