@@ -2,6 +2,7 @@ import { PrismaClient, type AttendanceStatus, type WouldMeetAgain } from '@prism
 const prisma = new PrismaClient();
 const diningTypeSeeds=[['first-meeting-ok','初対面OK'],['food-first','飯メイン'],['talkative','会話多め'],['quiet-ok','静かでもOK'],['drinks-welcome','酒あり歓迎'],['no-drinks','酒なし歓迎'],['otaku-talk','オタクトーク歓迎'],['work-talk','仕事トーク歓迎'],['late-night','深夜飯OK'],['quick-meal','サク飯派'],['long-stay','長居OK'],['leave-choice','店選び任せたい'],['like-choice','店選び好き']] as const;
 const purposeSeeds=[['just-eat','ただ飯'],['vent','愚痴りたい'],['work-talk','仕事の話'],['love-talk','恋バナ'],['otaku-talk','オタク話'],['drinks','飲みたい'],['quiet','静かに食べたい'],['new-tokyo','上京したて'],['business-trip','出張中'],['heartbreak','失恋した'],['new-friends','友達増やしたい'],['free','暇'],['late-night','深夜飯'],['new-place','新しい店に行きたい']] as const;
+const articleCategorySeeds=[['dinner-partners','食事相手'],['meal-friends','ご飯友達'],['drinking-friends','飲み友達'],['solo-dining','一人ご飯'],['adult-friendship','社会人の友達作り'],['gourmet','グルメ'],['service-guide','サービス活用法'],['safety','安全な利用方法']] as const;
 // 全市区町村ではなく、政令指定都市・県庁所在地・主要な繁華街/観光地レベルの「主要都市」だけを候補として持つ。
 // 自由入力(丁目・商店街名など)を妨げないよう、あくまでinput[list]のsuggestion用データ。
 const areaSeeds:readonly (readonly [string,string])[]=[
@@ -71,6 +72,7 @@ async function seedSequential<T,R>(items:readonly T[],fn:(item:T,index:number)=>
 async function main() {
   const diningTypes=await seedSequential(diningTypeSeeds,([slug,label],index)=>prisma.diningType.upsert({where:{slug},create:{slug,label,sortOrder:(index+1)*10},update:{label,sortOrder:(index+1)*10,isActive:true}}));
   const purposes=await seedSequential(purposeSeeds,([slug,label],index)=>prisma.mealPurpose.upsert({where:{slug},create:{slug,label,sortOrder:(index+1)*10},update:{label,sortOrder:(index+1)*10,isActive:true}}));
+  await seedSequential(articleCategorySeeds,([slug,name])=>prisma.articleCategory.upsert({where:{slug},create:{slug,name},update:{name}}));
   await seedSequential(areaSeeds,([prefecture,city],index)=>prisma.areaOption.upsert({where:{prefecture_city:{prefecture,city}},create:{prefecture,city,sortOrder:(index+1)*10},update:{sortOrder:(index+1)*10,isActive:true}}));
   // Cascade relations let us refresh demo records without touching real users or their meals.
   await prisma.businessAccount.deleteMany({where:{slug:{startsWith:'seed-'}}});

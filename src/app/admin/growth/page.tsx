@@ -50,6 +50,8 @@ export default async function GrowthDashboard({ searchParams }: { searchParams: 
         <Link className="text-link" href="/admin/business">Business Dashboardへ →</Link>
         <Link className="text-link" href="/admin/sales">営業候補・Sales Queueへ →</Link>
         <Link className="text-link" href="/admin/content">Content Studioへ →</Link>
+        <Link className="text-link" href="/admin/media">メディア記事管理へ →</Link>
+        <Link className="text-link" href="/admin/seo">SEO Dashboardへ →</Link>
       </div>
 
       <div className="panel">

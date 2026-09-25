@@ -246,6 +246,13 @@ enum AnalyticsSnapshotType {
   GROWTH_INSIGHTS
 }
 
+enum ArticleStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
 model User {
   id                    String    @id @default(cuid())
   email                 String?   @unique
@@ -285,6 +292,7 @@ model User {
   couponRedemptions      CouponRedemption[]
   assignedBusinessLeads  BusinessLead[]             @relation("AssignedBusinessLead")
   businessLeadNotes      BusinessLeadNote[]
+  articles               Article[]
 
   @@index([twitterUsername])
 }
@@ -306,26 +314,26 @@ model BusinessAccount {
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt
 
-  members            BusinessMember[]
-  sponsoredMeals     SponsoredMeal[]
-  sponsorCampaigns   SponsorCampaign[]
-  seatCampaigns      SeatCampaign[]
-  coupons            Coupon[]
-  directAdCampaigns  DirectAdCampaign[]
-  socialAccounts     BusinessSocialAccount[]
-  socialPostSettings BusinessSocialPostSetting[]
-  socialPosts        SocialPost[]
-  referralEvents     ReferralEvent[]
-  billingCustomer    BillingCustomer?
-  subscription       BusinessSubscription?
-  sponsorOrders      SponsorOrder[]
-  couponRedemptions  CouponRedemption[]
-  convertedLeads     BusinessLead[]
-  referralsSent      BusinessReferral[]          @relation("BusinessReferralReferrer")
-  referralReceived   BusinessReferral?           @relation("BusinessReferralReferred")
-  partnerMemberships PartnerCampaignMember[]
-  marketingEvents    BusinessMarketingEvent[]
-  areaSponsorships   AreaSponsorship[]
+  members                BusinessMember[]
+  sponsoredMeals         SponsoredMeal[]
+  sponsorCampaigns       SponsorCampaign[]
+  seatCampaigns          SeatCampaign[]
+  coupons                Coupon[]
+  directAdCampaigns      DirectAdCampaign[]
+  socialAccounts         BusinessSocialAccount[]
+  socialPostSettings     BusinessSocialPostSetting[]
+  socialPosts            SocialPost[]
+  referralEvents         ReferralEvent[]
+  billingCustomer        BillingCustomer?
+  subscription           BusinessSubscription?
+  sponsorOrders          SponsorOrder[]
+  couponRedemptions      CouponRedemption[]
+  convertedLeads         BusinessLead[]
+  referralsSent          BusinessReferral[]              @relation("BusinessReferralReferrer")
+  referralReceived       BusinessReferral?               @relation("BusinessReferralReferred")
+  partnerMemberships     PartnerCampaignMember[]
+  marketingEvents        BusinessMarketingEvent[]
+  areaSponsorships       AreaSponsorship[]
   notificationPreference BusinessNotificationPreference?
   notificationLogs       BusinessNotificationLog[]
 }
@@ -618,6 +626,88 @@ enum GrowthEventType {
   BUSINESS_NOTIFICATION_OPENED
   BUSINESS_NOTIFICATION_CLICKED
   BUSINESS_LIFECYCLE_TRIGGERED
+  MEDIA_VIEW
+  MEDIA_CTA_CLICK
+  MEDIA_RECRUITMENT_CLICK
+  SEO_AREA_VIEW
+  SEO_GENRE_VIEW
+  SEO_SIGNUP
+  SEO_RECRUITMENT_CREATE
+}
+
+model ArticleCategory {
+  id             String    @id @default(cuid())
+  name           String
+  slug           String    @unique
+  description    String?
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  articles       Article[]
+}
+
+model ArticleTag {
+  id        String               @id @default(cuid())
+  name      String
+  slug      String               @unique
+  createdAt DateTime             @default(now())
+  articles  ArticleTagRelation[]
+}
+
+model Article {
+  id             String               @id @default(cuid())
+  title          String
+  slug           String               @unique
+  excerpt        String?
+  content        String
+  coverImage     String?
+  coverImageAlt  String?
+  imageWidth     Int                  @default(1200)
+  imageHeight    Int                  @default(630)
+  status         ArticleStatus        @default(DRAFT)
+  publishedAt    DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  authorId       String
+  categoryId     String?
+  seoTitle       String?
+  seoDescription String?
+  canonicalUrl   String?
+  noindex        Boolean              @default(false)
+  ogImage        String?
+  viewCount      Int                  @default(0)
+  readingTime    Int                  @default(1)
+  featured       Boolean              @default(false)
+  priority       Int                  @default(0)
+  relatedArea    String?
+  relatedGenre   String?
+  author         User                 @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  category       ArticleCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags           ArticleTagRelation[]
+
+  @@index([status, publishedAt])
+  @@index([categoryId, status, publishedAt])
+  @@index([relatedArea, relatedGenre, status])
+}
+
+model ArticleTagRelation {
+  articleId String
+  tagId     String
+  article   Article    @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag       ArticleTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tagId])
+  @@index([tagId])
+}
+
+model ArticleSlugRedirect {
+  id        String   @id @default(cuid())
+  oldSlug   String   @unique
+  articleId String
+  createdAt DateTime @default(now())
+
+  @@index([articleId])
 }
 
 model GrowthEvent {
@@ -853,23 +943,23 @@ model DailyMetricJobRun {
 }
 
 model BusinessNotificationPreference {
-  businessAccountId       String   @id
-  activityEnabled         Boolean  @default(true)
-  campaignPerformanceEnabled Boolean @default(true)
-  billingEnabled          Boolean  @default(true)
-  growthTipsEnabled       Boolean  @default(true)
-  updatedAt               DateTime @updatedAt
-  businessAccount         BusinessAccount @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  businessAccountId          String          @id
+  activityEnabled            Boolean         @default(true)
+  campaignPerformanceEnabled Boolean         @default(true)
+  billingEnabled             Boolean         @default(true)
+  growthTipsEnabled          Boolean         @default(true)
+  updatedAt                  DateTime        @updatedAt
+  businessAccount            BusinessAccount @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
 }
 
 model BusinessNotificationLog {
-  id                String   @id @default(cuid())
+  id                String           @id @default(cuid())
   businessAccountId String
   notificationType  NotificationType
-  triggerKey        String   @unique
-  recipientCount    Int      @default(0)
-  createdAt         DateTime @default(now())
-  businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  triggerKey        String           @unique
+  recipientCount    Int              @default(0)
+  createdAt         DateTime         @default(now())
+  businessAccount   BusinessAccount  @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
 
   @@index([businessAccountId, createdAt])
   @@index([notificationType, createdAt])

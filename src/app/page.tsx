@@ -8,6 +8,10 @@ import { getPopularAreas } from '@/server/area-stats';
 import { getSocialProofHighlight } from '@/server/social-proof';
 import { measurePerformance } from '@/lib/performance';
 import { HomeLoginHint } from '@/components/auth-nav-state';
+import { appUrl } from '@/lib/social';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { alternates: { canonical: appUrl() } };
 
 // Builders need not have DB connectivity or Prisma's native system libraries.
 // The public feed is warmed at runtime; its existing data cache remains in use.
@@ -30,10 +34,12 @@ async function PopularAreas() {
 
 export default function Home() {
   return <>
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify([{ '@context': 'https://schema.org', '@type': 'WebSite', name: '俺は誰かと飯が食いたい！', alternateName: '俺メシ', url: appUrl() }, { '@context': 'https://schema.org', '@type': 'Organization', name: '俺は誰かと飯が食いたい！', alternateName: '俺メシ', url: appUrl() }]).replace(/</g, '\\u003c') }} />
     <section className="hero"><div className="hero-copy"><span className="eyebrow"><span className="live-dot" />ひとり飯もいいけど、今日は誰かと。</span><h1>俺は誰かと<br /><span className="underline-orange">飯が食いたい</span><span className="orange">！</span></h1><p className="hero-catch">今日、誰かと飯食わない？</p><p className="muted hero-description">行きたいお店がある。ちょっと誰かと話したい。<br />理由はそれくらいでいい。気軽に、飯の仲間を見つけよう。</p><Suspense fallback={null}><SocialProof /></Suspense><div className="hero-actions"><Link className="btn" href="/meals/new">飯を募集する <ArrowRight size={18} /></Link><Link className="btn secondary" href="/meals">誰かの飯に乗っかる</Link></div><HomeLoginHint/></div><div className="hero-art" aria-label="お箸とごはん、誰か飯いかん？"><span className="art-note">誰か、飯いかん？</span><div className="art-circle"><span className="rice">🍚</span><span className="chopsticks">🥢</span></div><span className="art-caption">GOOD FOOD, GOOD COMPANY.</span><span className="spark spark-one">✳</span><span className="spark spark-two">✳</span></div></section>
     <section className="how-strip"><p>飯に行くまで、<strong>たった3ステップ。</strong></p>{[{ Icon: Utensils, title: '食べたい飯を見つける' }, { Icon: CalendarDays, title: '「この飯に行く」を送る' }, { Icon: Handshake, title: '飯決定！あとは楽しむだけ' }].map(({ Icon, title }, i) => <div key={title}><span className="step-number">0{i + 1}</span><Icon size={21} /><span>{title}</span></div>)}</section>
     <section className="section"><div className="section-heading"><div><span className="eyebrow orange">LET’S EAT TOGETHER</span><h2>いま、誰かが飯を募集してる。</h2><p className="muted">ピンときたら、気軽に乗っかろう。</p></div><Link className="text-link" href="/meals">すべての飯を見る <ArrowRight size={17} /></Link></div><Suspense fallback={<div className="meal-grid" role="status" aria-label="募集を読み込み中">{[0, 1, 2].map(id => <div key={id} className="skeleton panel-skeleton" />)}</div>}><HomeMeals /></Suspense></section>
     <Suspense fallback={null}><PopularAreas /></Suspense>
+    <section className="section"><div className="section-heading"><div><span className="eyebrow orange">MEDIA</span><h2>ご飯友達を見つけるヒント</h2><p className="muted">食事相手の探し方や、初対面でも安全に楽しむためのガイド。</p></div><Link className="text-link" href="/media">食事相手・ご飯友達の記事を読む <ArrowRight size={17}/></Link></div></section>
     <BusinessRecruitBanner variant="partner" placement="HOME" href="/business" dismissible />
     <section className="invitation"><span>🍻</span><div><h2>「誰か飯いかん？」から始めよう。</h2><p>ラーメン一杯でも、ちょっと贅沢な夜ごはんでも。</p></div><Link className="btn" href="/meals/new">飯を募集する <ArrowRight size={17} /></Link></section>
   </>;
