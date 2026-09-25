@@ -22,7 +22,7 @@ export function ArticleForm({ article }: { article?: Editable | null }) {
       <label>優先度<input type="number" min="0" max="100" name="priority" defaultValue={article?.priority ?? 0} /></label>
     </div>
     <label>概要<textarea name="excerpt" maxLength={300} rows={3} defaultValue={article?.excerpt ?? ''} /></label>
-    <label>本文（Markdown）<ArticleContentEditor defaultValue={article?.content ?? ''} /></label>
+    <div className="field-group"><h2>本文</h2><ArticleContentEditor defaultValue={article?.content ?? ''} /></div>
     <div className="form-grid">
       <label>SEO title<input name="seoTitle" maxLength={70} defaultValue={article?.seoTitle ?? ''} /></label>
       <label>SEO description<input name="seoDescription" maxLength={180} defaultValue={article?.seoDescription ?? ''} /></label>

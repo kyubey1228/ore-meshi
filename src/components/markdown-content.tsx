@@ -1,7 +1,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { headingId, validPublicUrl } from '@/lib/media';
+import { headingId, injectHeadingIds, isHtmlContent, validPublicUrl } from '@/lib/media';
+import { sanitizeArticleHtml } from '@/lib/sanitize-article-html';
 
 function inline(text: string): ReactNode[] {
   const pattern = /(!?\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*)/g;
@@ -55,4 +56,14 @@ export function MarkdownContent({ content }: { content: string }) {
     nodes.push(<p key={start}>{inline(paragraphs.join(' '))}</p>);
   }
   return <div className="media-body">{nodes}</div>;
+}
+
+// 記事編集画面がWYSIWYG(Tiptap)化されて以降、新しい記事はHTMLで保存される。
+// 旧エディタ時代の独自Markdown記事も引き続き表示できるよう、フォーマットを自動判定する。
+export function ArticleBody({ content }: { content: string }) {
+  if (isHtmlContent(content)) {
+    const safeHtml = injectHeadingIds(sanitizeArticleHtml(content));
+    return <div className="media-body" dangerouslySetInnerHTML={{ __html: safeHtml }} />;
+  }
+  return <MarkdownContent content={content} />;
 }
