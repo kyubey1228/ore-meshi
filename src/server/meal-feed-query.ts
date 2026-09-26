@@ -43,7 +43,11 @@ export function buildOpenMealsQuery(filters: MealListFilters, limit: number, ski
   const windows = candidateWindows(filters.when, now);
     // All values are bound parameters. Filter and LIMIT the base rows before
     // fetching their public relations, in one SQL statement for every page.
-    const clauses = [Prisma.sql`m.status = 'OPEN'`, Prisma.sql`(m.deadline IS NULL OR m.deadline > ${now})`];
+    // 候補日時をすべて過ぎたOPEN Mealは、DBのstatusがまだ更新されていなくても一覧には出さない
+    // (statusの更新は/api/cron/notificationsの実行を待つため、タイムラグが生じうる)。
+    // 日付+開始時刻(JST)をタイムスタンプ化して比較する式は candidateStartInstant() のSQL版。
+    const hasFutureCandidate = Prisma.sql`EXISTS (SELECT 1 FROM ${databaseTable('MealCandidate')} c WHERE c."mealId" = m.id AND (to_char(c.date, 'YYYY-MM-DD') || 'T' || c."startTime" || ':00+09:00')::timestamptz > ${now})`;
+    const clauses = [Prisma.sql`m.status = 'OPEN'`, Prisma.sql`(m.deadline IS NULL OR m.deadline > ${now})`, hasFutureCandidate];
     if (filters.remaining) clauses.push(Prisma.sql`m."maxParticipants" - 1 - (SELECT count(*) FROM ${databaseTable('JoinRequest')} j WHERE j."mealId" = m.id AND j.status = 'ACCEPTED') = ${Number(filters.remaining)}`);
     if (filters.area) clauses.push(Prisma.sql`m.area ILIKE ${`%${filters.area}%`}`);
     if (filters.paymentType) clauses.push(Prisma.sql`m."paymentType"::text = ${filters.paymentType}`);

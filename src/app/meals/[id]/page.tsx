@@ -12,6 +12,7 @@ import { findMatchingActiveIntent } from '@/server/demand';
 import { computeHostTrustBadges } from '@/lib/host-trust';
 import { getVariant, JOIN_CTA_COPY } from '@/lib/experiments';
 import { candidateLabel, paymentLabels, yen, mealStatusLabels, requestStatusLabels, dateTimeLabel } from '@/lib/format';
+import { effectiveMealStatus } from '@/lib/meal-expiration';
 import { UserAvatar } from '@/components/meal-card';
 import { DiningTypePills, TagPills } from '@/components/tag-pills';
 import { JoinForm, JoinRequestsPanel, RequestDecision, CancelRequest, MealStatusControls } from '@/components/meal-controls';
@@ -34,13 +35,14 @@ export async function generateMetadata({params,searchParams}:{params:Promise<{id
   const [{id},query]=await Promise.all([params,searchParams]);const meal=await getPublicMealById(id);
   if(!meal)return {title:'飯募集が見つかりません'};
   const remaining=remainingSlots(meal);
-  const state=meal.status==='OPEN'?(remaining===1?'あと1人！':`あと${remaining}人`):meal.status==='MATCHED'?'飯、決まった。':mealStatusLabels[meal.status];
+  const status=effectiveMealStatus(meal);
+  const state=status==='OPEN'?(remaining===1?'あと1人！':`あと${remaining}人`):status==='MATCHED'?'飯、決まった。':mealStatusLabels[status];
   const description=truncate(`${state} ${meal.area}で「${meal.title}」 #誰か飯いこ`,120);
   const image=isUgcStyle(query.ugc_style)
     ?`${appUrl()}/api/ugc/meals/${encodeURIComponent(id)}?style=${query.ugc_style}`
     :`${appUrl()}/meals/${encodeURIComponent(id)}/opengraph-image`;
   const url=mealUrl(id);
-  const indexable=meal.status==='OPEN'||meal.status==='MATCHED';
+  const indexable=status==='OPEN'||status==='MATCHED';
   return {
     title:meal.title,
     description,
@@ -74,6 +76,7 @@ export default async function MealDetail({params,searchParams}:Props){
   const host=meal.hostId===userId;
   const myRequest=meal.joinRequests.find(request=>request.userId===userId);
   const remaining=remainingSlots(meal);
+  const status=effectiveMealStatus(meal);
   const baseShareText=meal.status==='MATCHED'?matchedShareText(meal,meal._count.joinRequests+1):mealShareText(meal);
   const shareText=shareTextForViewer(baseShareText,host,meal.host.displayName);
   const url=mealUrl(id);
@@ -84,13 +87,13 @@ export default async function MealDetail({params,searchParams}:Props){
     location:{'@type':'Place',name:`${meal.area}${meal.restaurant?` ${meal.restaurant}`:''}`},
     eventStatus:meal.status==='CANCELLED'?'https://schema.org/EventCancelled':'https://schema.org/EventScheduled',
     eventAttendanceMode:'https://schema.org/OfflineEventAttendanceMode',
-    offers:{'@type':'Offer','price':meal.budgetMin,'priceCurrency':'JPY','availability':meal.status==='OPEN'?'https://schema.org/InStock':'https://schema.org/SoldOut',url},
+    offers:{'@type':'Offer','price':meal.budgetMin,'priceCurrency':'JPY','availability':status==='OPEN'?'https://schema.org/InStock':'https://schema.org/SoldOut',url},
     organizer:{'@type':'Person',name:meal.host.displayName},
     description:meal.description??undefined,
     url,
   }:null;
 
-  const canJoin=!host&&!myRequest&&meal.status==='OPEN';
+  const canJoin=!host&&!myRequest&&status==='OPEN';
   const [intent,favorite,sessionKey,matchingDemandIntent]=await Promise.all([
     userId&&canJoin?resolveJoinIntent(id,true):Promise.resolve(null),
     userId?isFavoriteMeal(userId,id):Promise.resolve(false),
@@ -99,7 +102,7 @@ export default async function MealDetail({params,searchParams}:Props){
   ]);
   const experimentVariants=remaining===1?['A','B','C']:['A','B'];
   const variant=canJoin&&!userId?getVariant('join_cta',sessionKey,experimentVariants):null;
-  const canInvite=Boolean(userId)&&meal.status==='OPEN'&&(host||myRequest?.status==='ACCEPTED');
+  const canInvite=Boolean(userId)&&status==='OPEN'&&(host||myRequest?.status==='ACCEPTED');
 
   return <section className="section narrow">
     <GrowthTracker eventType="RECRUITMENT_VIEWED" recruitmentId={id} area={meal.area} foodCategory={meal.genre??undefined} loggedIn={Boolean(userId)}/>
@@ -109,9 +112,9 @@ export default async function MealDetail({params,searchParams}:Props){
     {jsonLd&&<script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(jsonLd)}}/>}
     <Link className="text-link" href="/meals">← 飯の一覧へ</Link>
     {canJoin&&<MobileStickyJoinBar area={meal.area} when={firstCandidate?candidateLabel(firstCandidate):'日時調整中'} remaining={remaining} participantCount={meal._count.joinRequests+1}/>}
-    <div className={`panel detail${meal.status==='OPEN'&&remaining===1?' last-slot':''}`}>
-      <div className="row between wrap"><span className="tag">{mealStatusLabels[meal.status]}</span><FavoriteButton mealId={id} loggedIn={Boolean(userId)} initialFavorite={favorite}/></div>
-      {meal.status==='OPEN'&&remaining===1&&<p className="last-slot-label">🔥 あと1人で飯決定！</p>}
+    <div className={`panel detail${status==='OPEN'&&remaining===1?' last-slot':''}`}>
+      <div className="row between wrap"><span className="tag">{mealStatusLabels[status]}</span><FavoriteButton mealId={id} loggedIn={Boolean(userId)} initialFavorite={favorite}/></div>
+      {status==='OPEN'&&remaining===1&&<p className="last-slot-label">🔥 あと1人で飯決定！</p>}
       {matchingDemandIntent&&<p className="last-slot-label">🎯 あなたの「行きたい」条件と一致しています</p>}
       {meal.sponsoredMeals[0]&&<p className="last-slot-label">PR · 提供:{meal.sponsoredMeals[0].sponsorName}{meal.sponsoredMeals[0].benefit?` / ${meal.sponsoredMeals[0].benefit}`:''}</p>}
       <h1>{meal.title}</h1>
@@ -125,7 +128,7 @@ export default async function MealDetail({params,searchParams}:Props){
         <div><dt>いくら</dt><dd>{yen(meal.budgetMin)}〜{yen(meal.budgetMax)} / 人</dd></div>
         <div><dt>お会計</dt><dd>{paymentLabels[meal.paymentType]}</dd></div>
         <div><dt>何人</dt><dd>{meal._count.joinRequests+1} / {meal.maxParticipants}人（募集者含む）</dd></div>
-        {meal.status==='OPEN'&&<div><dt>残り</dt><dd>あと{remaining}人</dd></div>}
+        {status==='OPEN'&&<div><dt>残り</dt><dd>あと{remaining}人</dd></div>}
         {meal.deadline&&<div><dt>締切</dt><dd>{dateTimeLabel(meal.deadline)}</dd></div>}
         {[{label:'ジャンル',value:meal.genre},{label:'お酒',value:meal.alcohol},{label:'たばこ',value:meal.smoking},{label:'年齢条件',value:meal.ageCondition}].filter(value=>value.value).map(value=><div key={value.label}><dt>{value.label}</dt><dd>{value.value}</dd></div>)}
       </dl>
@@ -150,7 +153,7 @@ export default async function MealDetail({params,searchParams}:Props){
 
     {canInvite&&userId&&<Suspense fallback={null}><MealReferral userId={userId} mealId={id} text={`${remaining>0?`あと${remaining}人で集まります！`:''}\n${firstCandidate?`${candidateLabel(firstCandidate)}〜`:''}${meal.area}で${meal.title}`}/></Suspense>}
 
-    {(host&&meal.status==='OPEN'||!host&&myRequest?.status==='PENDING')&&<EmailNotificationGuide />}
+    {(host&&status==='OPEN'||!host&&myRequest?.status==='PENDING')&&<EmailNotificationGuide />}
     {host&&<JoinRequestsPanel mealId={id}><div className="panel">
       <h2>参加希望が届いてるよ</h2>
       {meal.joinRequests.length===0&&<p className="muted">まだ参加希望はありません。のんびり待とう。</p>}
