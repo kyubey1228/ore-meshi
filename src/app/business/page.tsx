@@ -30,7 +30,7 @@ export default function BusinessLanding() {
   return <div className="business-lp">
     <BusinessMarketingTracker eventType="BUSINESS_LP_VIEW" />
     <section className="business-hero">
-      <span className="business-hero-circle" aria-hidden="true"><Image src="/business/hero/izakaya-interior.jpg" alt="" fill preload sizes="(max-width: 720px) 150px, 420px" style={{ objectFit: 'cover' }} /></span>
+      <span className="business-hero-circle" aria-hidden="true"><Image src="https://storage.googleapis.com/ore-meshi/static/business/hero/izakaya-interior.jpg" alt="" fill preload unoptimized sizes="(max-width: 720px) 150px, 420px" style={{ objectFit: 'cover' }} /></span>
       <span className="eyebrow orange">俺メシ FOR BUSINESS</span><h1>空席を、<br />今夜の客に。</h1>
       <p>スポンサー飯・空席スポンサーを使って、店舗の空席やキャンペーンを実際の“飯の予定”に変えます。</p>
       <div className="hero-actions"><Suspense fallback={<HeroSignupLink member={false} />}><PersonalizedHeroSignup membershipPromise={membershipPromise} /></Suspense><BusinessMarketingLink className="btn secondary" href="/business/pricing" eventType="PRICING_CTA_CLICK" placement="HERO">料金を見る</BusinessMarketingLink><BusinessMarketingLink className="btn ghost" href="/business/contact" eventType="CONTACT_CTA_CLICK" placement="HERO">まず相談する</BusinessMarketingLink></div>
