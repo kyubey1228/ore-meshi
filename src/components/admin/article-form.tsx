@@ -29,7 +29,7 @@ export function ArticleForm({ article }: { article?: Editable | null }) {
       <label>canonical URL<input type="url" name="canonicalUrl" defaultValue={article?.canonicalUrl ?? ''} /></label>
       <label>画像alt<input name="coverImageAlt" maxLength={160} defaultValue={article?.coverImageAlt ?? ''} /></label>
     </div>
-    <MediaImageUploader name="coverImage" label="アイキャッチ画像" purpose="cover" defaultValue={article?.coverImage ?? ''} defaultOgValue={article?.ogImage ?? ''} autoGenerateOg includeDimensions defaultWidth={article?.imageWidth ?? 1200} defaultHeight={article?.imageHeight ?? 630}/>
+    <div className="form-grid"><MediaImageUploader name="coverImage" label="アイキャッチ画像" purpose="cover" defaultValue={article?.coverImage ?? ''} includeDimensions defaultWidth={article?.imageWidth ?? 1200} defaultHeight={article?.imageHeight ?? 630}/><MediaImageUploader name="ogImage" label="OG画像" purpose="og" defaultValue={article?.ogImage ?? ''}/></div>
     <div className="row wrap"><label className="check-label"><input type="checkbox" name="featured" defaultChecked={article?.featured} /> おすすめ</label><label className="check-label"><input type="checkbox" name="noindex" defaultChecked={article?.noindex} /> noindex</label></div>
   </ActionForm>;
 }
