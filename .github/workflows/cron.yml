@@ -1,0 +1,82 @@
+name: Scheduled Cron Jobs
+
+# growth-automation-phase2の設計(外部Cronから叩く/常駐timerは使わない)に沿って、
+# 本番の/api/cron/*エンドポイントをGitHub Actionsのscheduleから呼び出す。
+# GitHub Actionsのscheduleは負荷状況により数分〜数十分遅延することがあり、
+# リポジトリに60日間コミットが無いと自動停止する点に留意すること。
+on:
+  schedule:
+    - cron: '*/15 * * * *' # notifications: 期日超過募集の自動終了・各種通知を15分おきに処理
+    - cron: '0 16 * * *'   # daily-metrics: JST 01:00以降に前日分を集計
+    - cron: '0 17 * * *'   # business-lifecycle: JST 02:00に店舗向け通知を処理
+  workflow_dispatch:
+    inputs:
+      job:
+        description: '手動実行するジョブ'
+        type: choice
+        options: [notifications, daily-metrics, business-lifecycle]
+        default: notifications
+
+env:
+  APP_BASE_URL: https://ore-meshi.lolipop-now.app
+
+jobs:
+  notifications:
+    if: github.event.schedule == '*/15 * * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'notifications')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call /api/cron/notifications until hasMore=false
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          query=""
+          for i in $(seq 1 20); do
+            response=$(curl -sS -w '\n%{http_code}' -H "x-cron-secret: ${CRON_SECRET}" "${APP_BASE_URL}/api/cron/notifications?limit=100${query}")
+            http_status="${response##*$'\n'}"
+            body="${response%$'\n'*}"
+            echo "$body"
+            if [ "$http_status" -ge 300 ]; then echo "HTTP $http_status"; exit 1; fi
+            hasMore=$(echo "$body" | jq -r '.hasMore')
+            if [ "$hasMore" != "true" ]; then break; fi
+            query=$(echo "$body" | jq -r '.nextCursor | to_entries | map(select(.value != null)) | map("&\(.key)=\(.value|tostring)") | join("")')
+          done
+
+  daily-metrics:
+    if: github.event.schedule == '0 16 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'daily-metrics')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call /api/cron/daily-metrics
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          response=$(curl -sS -w '\n%{http_code}' -H "x-cron-secret: ${CRON_SECRET}" "${APP_BASE_URL}/api/cron/daily-metrics")
+          http_status="${response##*$'\n'}"
+          echo "${response%$'\n'*}"
+          if [ "$http_status" -ge 300 ]; then echo "HTTP $http_status"; exit 1; fi
+
+  business-lifecycle:
+    if: github.event.schedule == '0 17 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'business-lifecycle')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call /api/cron/business-lifecycle until hasMore=false
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          cursor=""
+          for i in $(seq 1 20); do
+            response=$(curl -sS -w '\n%{http_code}' -H "x-cron-secret: ${CRON_SECRET}" "${APP_BASE_URL}/api/cron/business-lifecycle?limit=200${cursor}")
+            http_status="${response##*$'\n'}"
+            body="${response%$'\n'*}"
+            echo "$body"
+            if [ "$http_status" -ge 300 ]; then echo "HTTP $http_status"; exit 1; fi
+            hasMore=$(echo "$body" | jq -r '.hasMore')
+            if [ "$hasMore" != "true" ]; then break; fi
+            next=$(echo "$body" | jq -r '.cursor')
+            cursor="&cursor=${next}"
+          done
