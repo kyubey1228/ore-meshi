@@ -14,6 +14,19 @@ export function resolveGcsProjectId(explicitProjectId: string | undefined, clien
   return domain?.endsWith('.iam.gserviceaccount.com') ? domain.slice(0, -'.iam.gserviceaccount.com'.length) : undefined;
 }
 
+export function normalizeGcsPrivateKey(value: string | undefined) {
+  if (!value?.trim()) return undefined;
+  let normalized = value.trim();
+  if (normalized.startsWith('"') && normalized.endsWith('"')) {
+    try {
+      const parsed: unknown = JSON.parse(normalized);
+      if (typeof parsed === 'string') normalized = parsed;
+    } catch { /* 引用符付きでない通常形式として後段で検証する */ }
+  }
+  normalized = normalized.replace(/\\n/g, '\n').trim();
+  return normalized;
+}
+
 export function gcsObjectName(purpose: 'cover' | 'og' | 'body', id: string, now = new Date()) {
   return `articles/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${purpose}-${id}.webp`;
 }

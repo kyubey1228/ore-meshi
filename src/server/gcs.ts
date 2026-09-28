@@ -1,12 +1,12 @@
 import 'server-only';
 import { Storage } from '@google-cloud/storage';
-import { gcsPublicUrl, resolveGcsProjectId } from '@/lib/gcs-upload';
+import { gcsPublicUrl, normalizeGcsPrivateKey, resolveGcsProjectId } from '@/lib/gcs-upload';
 
 export const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'ore-meshi';
 
 function credentials() {
   const clientEmail = process.env.GCS_CLIENT_EMAIL?.trim();
-  const privateKey = process.env.GCS_PRIVATE_KEY?.replace(/\\n/g, '\n').trim();
+  const privateKey = normalizeGcsPrivateKey(process.env.GCS_PRIVATE_KEY);
   if (!clientEmail || !privateKey) return undefined;
   return { client_email: clientEmail, private_key: privateKey };
 }
@@ -14,8 +14,8 @@ function credentials() {
 export function gcsStorage() {
   const explicit = credentials();
   const projectId = resolveGcsProjectId(process.env.GCS_PROJECT_ID, explicit?.client_email);
-  if (!projectId) throw new Error('GCS_PROJECT_ID is not configured');
-  if (!explicit && !process.env.GOOGLE_APPLICATION_CREDENTIALS) throw new Error('GCS service account credentials are not configured');
+  if (!projectId) throw new Error('GCS_CONFIG_MISSING:project_id');
+  if (!explicit && !process.env.GOOGLE_APPLICATION_CREDENTIALS) throw new Error('GCS_CONFIG_MISSING:credentials');
   return new Storage({ projectId, ...(explicit ? { credentials: explicit } : {}) });
 }
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_GCS_UPLOAD_BYTES, gcsObjectName, gcsPublicUrl, gcsUploadRequestSchema, resolveGcsProjectId } from '../src/lib/gcs-upload';
+import { MAX_GCS_UPLOAD_BYTES, gcsObjectName, gcsPublicUrl, gcsUploadRequestSchema, normalizeGcsPrivateKey, resolveGcsProjectId } from '../src/lib/gcs-upload';
 
 test('GCSプロジェクトIDは明示値を優先し、未指定時だけサービスアカウントから補完する', () => {
   assert.equal(resolveGcsProjectId(' explicit-project ', 'u@fallback.iam.gserviceaccount.com'), 'explicit-project');
@@ -10,6 +10,14 @@ test('GCSプロジェクトIDは明示値を優先し、未指定時だけサー
 
 test('記事画像は年月・用途・UUIDを含む衝突しにくいパスになる', () => {
   assert.equal(gcsObjectName('cover', 'test-id', new Date('2026-09-28T00:00:00Z')), 'articles/2026/09/cover-test-id.webp');
+});
+
+test('秘密鍵は実改行・\\n・JSON引用符付き形式を同じPEMへ正規化する', () => {
+  const pem = '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----';
+  assert.equal(normalizeGcsPrivateKey(pem), pem);
+  assert.equal(normalizeGcsPrivateKey(pem.replace(/\n/g, '\\n')), pem);
+  assert.equal(normalizeGcsPrivateKey(JSON.stringify(pem)), pem);
+  assert.equal(normalizeGcsPrivateKey(''), undefined);
 });
 
 test('公開URLはバケット名と各パス要素をURLエンコードする', () => {
