@@ -1,15 +1,17 @@
 import 'server-only';
 import nodemailer from 'nodemailer';
+import { resolveSmtpSecure } from '@/lib/smtp';
 
 // SMTP環境変数が未設定の場合はメール送信自体をno-opにする(ローカル/未設定環境でのエラーを避ける)。
 // どのSMTPプロバイダでも(Gmail Workspace/SendGrid/AWS SES等のSMTPリレー含め)差し替えられる最小構成。
 function transport() {
   const host = process.env.SMTP_HOST;
   if (!host) return null;
+  const port = Number(process.env.SMTP_PORT ?? 587);
   return nodemailer.createTransport({
     host,
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: process.env.SMTP_SECURE === 'true',
+    port,
+    secure: resolveSmtpSecure(port, process.env.SMTP_SECURE),
     auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
     connectionTimeout: 8_000,
     greetingTimeout: 8_000,
