@@ -24,6 +24,15 @@ test('generateContentIdeasは需要過多エリアがあるとX/Threads向けの
   assert.equal(ideas[1].channel, 'THREADS');
 });
 
+test('generateContentIdeasはデータが少なくても(1件から)下書きを作る', () => {
+  const completedIdeas = generateContentIdeas({ weeklyCompleted: 1, weeklyUniqueDiners: 2, topArea: null, openMealsTopArea: null, highDemandCell: null });
+  assert.equal(completedIdeas.length, 2);
+  assert.match(completedIdeas[0].body, /1件/);
+  const openMealIdeas = generateContentIdeas({ weeklyCompleted: 0, weeklyUniqueDiners: 0, topArea: null, openMealsTopArea: { area: '渋谷区', count: 1 }, highDemandCell: null });
+  assert.equal(openMealIdeas.length, 1);
+  assert.match(openMealIdeas[0].body, /渋谷区/);
+});
+
 test('generateContentIdeasは最大6件までに抑える', () => {
   const ideas = generateContentIdeas({
     weeklyCompleted: 12, weeklyUniqueDiners: 20, topArea: '渋谷区',

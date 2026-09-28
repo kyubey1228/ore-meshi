@@ -22,7 +22,7 @@ export async function getContentStudioAggregates(): Promise<ContentStudioAggrega
   const areaCounts = new Map<string, number>();
   for (const row of areaRows) areaCounts.set(row.meal.area, (areaCounts.get(row.meal.area) ?? 0) + 1);
   const topArea = [...areaCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  const openMealsTopArea = openMeals[0] && openMeals[0]._count._all >= 3 ? { area: openMeals[0].area, count: openMeals[0]._count._all } : null;
+  const openMealsTopArea = openMeals[0] && openMeals[0]._count._all >= 1 ? { area: openMeals[0].area, count: openMeals[0]._count._all } : null;
   const highDemandCandidate = matrix
     .filter(c => c.demandIntents >= MIN_BUSINESS_SAMPLE_SIZE && c.demandIntents > c.activeMeals)
     .sort((a, b) => (b.demandIntents - b.activeMeals) - (a.demandIntents - a.activeMeals))[0];
