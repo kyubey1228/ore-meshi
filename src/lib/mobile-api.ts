@@ -17,6 +17,24 @@ export function mobileOptions() {
   return new Response(null, { status: 204, headers: PUBLIC_HEADERS });
 }
 
+export function mobilePrivateJson<T>(body: T, init?: ResponseInit) {
+  const response = NextResponse.json(body, init);
+  response.headers.set('Cache-Control', 'private, no-store');
+  response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  return response;
+}
+
+export function mobilePrivateOptions() {
+  return new Response(null, { status: 204, headers: {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Cache-Control': 'private, no-store',
+  } });
+}
+
 export function plainArticleText(content: string) {
   return content
     .replace(/<br\s*\/?\s*>/gi, '\n')

@@ -293,6 +293,8 @@ model User {
   assignedBusinessLeads  BusinessLead[]             @relation("AssignedBusinessLead")
   businessLeadNotes      BusinessLeadNote[]
   articles               Article[]
+  mobileAuthorizationCodes MobileAuthorizationCode[]
+  mobileSessions           MobileSession[]
 
   @@index([twitterUsername])
 }
@@ -1360,6 +1362,34 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model MobileAuthorizationCode {
+  id            String    @id @default(cuid())
+  codeHash      String    @unique
+  codeChallenge String
+  userId        String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model MobileSession {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 model Meal {
