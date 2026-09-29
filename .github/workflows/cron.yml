@@ -18,7 +18,7 @@ on:
         default: notifications
 
 env:
-  APP_BASE_URL: https://ore-meshi.lolipop-now.app
+  APP_BASE_URL: https://ore-meshi.com
 
 jobs:
   notifications:

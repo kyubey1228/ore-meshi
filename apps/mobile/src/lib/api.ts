@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = 'https://ore-meshi.lolipop-now.app';
+const DEFAULT_API_URL = 'https://ore-meshi.com';
 export const WEB_URL = (process.env.EXPO_PUBLIC_WEB_URL || DEFAULT_API_URL).replace(/\/$/, '');
 const API_URL = (process.env.EXPO_PUBLIC_API_URL || WEB_URL).replace(/\/$/, '');
 export type Person = { id?: string; displayName: string; twitterUsername?: string; image?: string | null; bio?: string | null };

@@ -57,7 +57,7 @@ async function main() {
   const ownerToken = await mintSessionToken(ownerUser.id, ownerUser.displayName);
   const adminToken = await mintSessionToken(adminUser.id, adminUser.displayName);
   const cookieName = '__Secure-next-auth.session-token';
-  const domain = 'ore-meshi.lolipop-now.app';
+  const domain = 'ore-meshi.com';
 
   console.log('\n===== 一般ユーザー(テスト) =====');
   console.log(`userId: ${generalUser.id}`);
