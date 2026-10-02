@@ -8,6 +8,26 @@ import { uploadArticleImage } from '@/lib/upload-image-client';
 
 type HeadingLevel = 2 | 3 | 4;
 const HEADING_OPTIONS: { value: 'p' | HeadingLevel; label: string }[] = [{ value: 'p', label: '段落' }, { value: 2, label: '見出し2' }, { value: 3, label: '見出し3' }, { value: 4, label: '見出し4' }];
+type ImageSize = 'auto' | 'small' | 'medium' | 'large' | 'full';
+const IMAGE_SIZE_OPTIONS: { value: ImageSize; label: string }[] = [
+  { value: 'auto', label: '画像：元サイズ' },
+  { value: 'small', label: '画像：小（40%）' },
+  { value: 'medium', label: '画像：中（65%）' },
+  { value: 'large', label: '画像：大（85%）' },
+  { value: 'full', label: '画像：横幅いっぱい' },
+];
+const ArticleImage = TiptapImage.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      imageSize: {
+        default: 'auto',
+        parseHTML: element => element.getAttribute('data-image-size') || 'auto',
+        renderHTML: attributes => attributes.imageSize === 'auto' ? {} : { 'data-image-size': attributes.imageSize },
+      },
+    };
+  },
+});
 
 export function ArticleContentEditor({ defaultValue }: { defaultValue?: string }) {
   const [html, setHtml] = useState(defaultValue ?? '');
@@ -18,7 +38,7 @@ export function ArticleContentEditor({ defaultValue }: { defaultValue?: string }
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
-      TiptapImage,
+      ArticleImage,
       Placeholder.configure({ placeholder: '本文を入力…' }),
     ],
     content: defaultValue || '',
@@ -32,7 +52,7 @@ export function ArticleContentEditor({ defaultValue }: { defaultValue?: string }
     try {
       const uploaded = await uploadArticleImage(file, 'body');
       const alt = window.prompt('画像の代替テキスト（alt）', '') ?? '';
-      editor.chain().focus().setImage({ src: uploaded.url, alt }).run();
+      editor.chain().focus().setImage({ src: uploaded.url, alt }).updateAttributes('image', { imageSize: 'full' }).run();
     } catch (error) { window.alert(error instanceof Error ? error.message : '画像をアップロードできませんでした。'); }
     finally { setUploading(false); }
   }, [editor]);
@@ -48,6 +68,8 @@ export function ArticleContentEditor({ defaultValue }: { defaultValue?: string }
 
   if (!editor) return <div className="content-editor" />;
   const activeHeading = ([2, 3, 4] as const).find(level => editor.isActive('heading', { level })) ?? 'p';
+  const imageSelected = editor.isActive('image');
+  const activeImageSize = (imageSelected ? editor.getAttributes('image').imageSize : 'auto') as ImageSize;
 
   return <div className="content-editor">
     <div className="content-editor-toolbar">
@@ -62,6 +84,9 @@ export function ArticleContentEditor({ defaultValue }: { defaultValue?: string }
       <button type="button" className={`btn secondary small${editor.isActive('blockquote') ? ' active' : ''}`} onClick={() => editor.chain().focus().toggleBlockquote().run()}>引用</button>
       <button type="button" className={`btn secondary small${editor.isActive('link') ? ' active' : ''}`} onClick={setLink}>リンク</button>
       <button type="button" className="btn secondary small" disabled={uploading} onClick={() => fileInputRef.current?.click()}>{uploading ? 'アップロード中…' : '画像'}</button>
+      <select aria-label="選択中の画像サイズ" value={activeImageSize} disabled={!imageSelected} onChange={event => editor.chain().focus().updateAttributes('image', { imageSize: event.target.value as ImageSize }).run()}>
+        {IMAGE_SIZE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
       <button type="button" className="btn secondary small" onClick={() => editor.chain().focus().setHorizontalRule().run()}>区切り線</button>
       <button type="button" className="btn secondary small" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>元に戻す</button>
       <button type="button" className="btn secondary small" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>やり直す</button>
