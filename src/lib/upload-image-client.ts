@@ -31,7 +31,13 @@ export async function uploadArticleImage(file: File, purpose: 'cover' | 'og' | '
   const signed = await fetch('/api/admin/media/upload-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contentType: 'image/webp', size: optimized.blob.size, purpose }) });
   const data = await signed.json() as { ok: boolean; uploadUrl?: string; publicUrl?: string; message?: string };
   if (!signed.ok || !data.uploadUrl || !data.publicUrl) throw new Error(data.message || 'アップロードURLを取得できませんでした。');
-  const result = await fetch(data.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: optimized.blob });
-  if (!result.ok) throw new Error(`GCSへのアップロードに失敗しました（${result.status}）。`);
-  return { url: data.publicUrl, width: optimized.width, height: optimized.height };
+  try {
+    const result = await fetch(data.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: optimized.blob });
+    if (result.ok) return { url: data.publicUrl, width: optimized.width, height: optimized.height };
+  } catch { /* CORSやネットワーク制限時は同一オリジン経由へ切り替える */ }
+
+  const fallback = await fetch(`/api/admin/media/upload?purpose=${encodeURIComponent(purpose)}`, { method: 'POST', headers: { 'Content-Type': 'image/webp' }, body: optimized.blob });
+  const fallbackData = await fallback.json() as { ok: boolean; publicUrl?: string; message?: string };
+  if (!fallback.ok || !fallbackData.publicUrl) throw new Error(fallbackData.message || '画像をアップロードできませんでした。');
+  return { url: fallbackData.publicUrl, width: optimized.width, height: optimized.height };
 }
