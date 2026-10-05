@@ -29,7 +29,10 @@ jobs:
       - name: Forward inbound support mail
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: curl --fail-with-body -sS -H "x-cron-secret: ${CRON_SECRET}" "${APP_BASE_URL}/api/cron/mail-forward"
+        run: |
+          curl --fail-with-body -sS \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            "${APP_BASE_URL}/api/cron/mail-forward"
 
   notifications:
     if: github.event.schedule == '*/15 * * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'notifications')
