@@ -14,13 +14,23 @@ on:
       job:
         description: '手動実行するジョブ'
         type: choice
-        options: [notifications, daily-metrics, business-lifecycle]
+        options: [notifications, mail-forward, daily-metrics, business-lifecycle]
         default: notifications
 
 env:
   APP_BASE_URL: https://ore-meshi.com
 
 jobs:
+  mail-forward:
+    if: github.event.schedule == '*/15 * * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'mail-forward')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Forward inbound support mail
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: curl --fail-with-body -sS -H "x-cron-secret: ${CRON_SECRET}" "${APP_BASE_URL}/api/cron/mail-forward"
+
   notifications:
     if: github.event.schedule == '*/15 * * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'notifications')
     runs-on: ubuntu-latest

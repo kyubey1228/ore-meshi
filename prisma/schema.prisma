@@ -714,6 +714,12 @@ model ArticleSlugRedirect {
   @@index([articleId])
 }
 
+model MailForwardCursor {
+  mailbox   String   @id
+  lastUid   BigInt   @default(0)
+  updatedAt DateTime @updatedAt
+}
+
 model GrowthEvent {
   id            String          @id @default(cuid())
   sessionKey    String

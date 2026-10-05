@@ -41,7 +41,9 @@
     "clsx": "^2.1.1",
     "cn": "^0.2.6",
     "date-fns": "^4.4.0",
+    "imapflow": "^2.2.5",
     "lucide-react": "^1.43.0",
+    "mailparser": "^3.9.35",
     "next": "16.3.4",
     "next-auth": "^4.24.15",
     "next-themes": "^0.4.6",
@@ -62,6 +64,7 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
+    "@types/mailparser": "^3.9.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

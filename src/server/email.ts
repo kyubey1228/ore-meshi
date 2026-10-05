@@ -23,13 +23,13 @@ export function emailEnabled() {
   return Boolean(process.env.SMTP_HOST);
 }
 
-export async function sendEmail(input: { to: string; subject: string; html: string; text: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function sendEmail(input: { to: string; subject: string; html: string; text: string; replyTo?: string; attachments?: { filename: string; content: Buffer; contentType: string }[] }): Promise<{ ok: true } | { ok: false; error: string }> {
   const t = transport();
   if (!t) return { ok: false, error: 'SMTP_HOST未設定のため送信をスキップしました。' };
   let lastError = 'unknown error';
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      await t.sendMail({ from: process.env.SMTP_FROM ?? '"俺は誰かと飯が食いたい！" <no-reply@ore-meshi.app>', to: input.to, subject: input.subject, html: input.html, text: input.text });
+      await t.sendMail({ from: process.env.SMTP_FROM ?? '"俺は誰かと飯が食いたい！" <no-reply@ore-meshi.app>', to: input.to, subject: input.subject, html: input.html, text: input.text, replyTo: input.replyTo, attachments: input.attachments });
       return { ok: true };
     } catch (error) {
       lastError = error instanceof Error ? error.message : 'unknown error';
