@@ -4,6 +4,7 @@ import { createNotification } from '@/server/notifications';
 import { recordGrowthEvent } from '@/server/growth';
 import { measurePerformance } from '@/lib/performance';
 import { shouldAutoCloseMeal } from '@/lib/meal-expiration';
+import { hasValidCronSecret } from '@/lib/security';
 
 const MAX_BATCH = 200;
 const CONCURRENCY = 5;
@@ -27,8 +28,7 @@ function cursorWhere(cursor: string | null) { return cursor ? { id: { gt: cursor
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const secret = request.headers.get('x-cron-secret') ?? url.searchParams.get('secret');
-  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  if (!hasValidCronSecret(request)) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
 
   return measurePerformance('NOTIFICATION', 'cron batch', async () => {
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 50, 1), MAX_BATCH);

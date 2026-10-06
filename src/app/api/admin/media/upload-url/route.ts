@@ -1,24 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { appUrl } from '@/lib/social';
 import { gcsObjectName, gcsUploadRequestSchema } from '@/lib/gcs-upload';
+import { isAllowedBrowserOrigin, readJsonWithLimit } from '@/lib/security';
 import { requireAdmin } from '@/server/admin';
 import { UserError } from '@/server/action';
 import { GCS_BUCKET_NAME, gcsStorage, publicGcsUrl } from '@/server/gcs';
 
 export const runtime = 'nodejs';
 
-function allowedOrigin(request: Request) {
-  const origin = request.headers.get('origin');
-  if (!origin) return process.env.NODE_ENV !== 'production';
-  return origin === appUrl() || origin === 'http://localhost:3000';
-}
-
 export async function POST(request: Request) {
   try {
-    if (!allowedOrigin(request)) return NextResponse.json({ ok: false, message: '許可されていない送信元です。' }, { status: 403 });
+    if (!isAllowedBrowserOrigin(request)) return NextResponse.json({ ok: false, message: '許可されていない送信元です。' }, { status: 403 });
     await requireAdmin();
-    const input = gcsUploadRequestSchema.parse(await request.json());
+    const input = gcsUploadRequestSchema.parse(await readJsonWithLimit(request));
     const objectName = gcsObjectName(input.purpose, randomUUID());
     const file = gcsStorage().bucket(GCS_BUCKET_NAME).file(objectName);
     const [uploadUrl] = await file.getSignedUrl({ version: 'v4', action: 'write', expires: Date.now() + 5 * 60 * 1000, contentType: input.contentType });

@@ -2,9 +2,13 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { campaignIsShareable, getCampaignShareData } from '@/server/business';
+import { checkRateLimit, isAllowedBrowserOrigin, readJsonWithLimit } from '@/lib/security';
 const schema=z.object({kind:z.enum(['SPONSORED_MEAL','SPONSOR_CAMPAIGN','SEAT_CAMPAIGN','COUPON','DIRECT_AD_CAMPAIGN']),id:z.string().min(1).max(100),utmSource:z.literal('x'),utmMedium:z.string().max(40).optional(),utmCampaign:z.string().max(80).optional(),ref:z.uuid().optional()});
 export async function POST(request:Request){
-  const parsed=schema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return NextResponse.json({ok:false},{status:400});
+  if(!isAllowedBrowserOrigin(request))return NextResponse.json({ok:false},{status:403});
+  const rateLimit=checkRateLimit(request,'referrals',60);if(!rateLimit.allowed)return NextResponse.json({ok:false},{status:429,headers:{'Retry-After':String(rateLimit.retryAfter)}});
+  let body:unknown;try{body=await readJsonWithLimit(request);}catch(error){return NextResponse.json({ok:false},{status:error instanceof Response?error.status:400});}
+  const parsed=schema.safeParse(body);if(!parsed.success)return NextResponse.json({ok:false},{status:400});
   const data=parsed.data;const campaign=await getCampaignShareData(data.kind,data.id);if(!campaign||!await campaignIsShareable(campaign))return NextResponse.json({ok:false},{status:404});
   const socialPost=data.ref?await prisma.socialPost.findUnique({where:{idempotencyKey:`manual:${campaign.businessAccountId}:${data.ref}`},select:{id:true}}):null;
   const event=await prisma.referralEvent.create({data:{businessAccountId:campaign.businessAccountId,socialPostId:socialPost?.id,entityType:data.kind,entityId:data.id,eventType:'X_VISIT',utmSource:data.utmSource,utmMedium:data.utmMedium,utmCampaign:data.utmCampaign,anonymousId:crypto.randomUUID()}});

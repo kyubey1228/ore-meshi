@@ -1,22 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { appUrl } from '@/lib/social';
 import { gcsObjectName, gcsUploadRequestSchema, MAX_GCS_UPLOAD_BYTES } from '@/lib/gcs-upload';
+import { isAllowedBrowserOrigin } from '@/lib/security';
 import { requireAdmin } from '@/server/admin';
 import { UserError } from '@/server/action';
 import { GCS_BUCKET_NAME, gcsStorage, publicGcsUrl } from '@/server/gcs';
 
 export const runtime = 'nodejs';
 
-function allowedOrigin(request: Request) {
-  const origin = request.headers.get('origin');
-  if (!origin) return process.env.NODE_ENV !== 'production';
-  return origin === appUrl() || origin === 'http://localhost:3000';
-}
-
 export async function POST(request: Request) {
   try {
-    if (!allowedOrigin(request)) return NextResponse.json({ ok: false, message: '許可されていない送信元です。' }, { status: 403 });
+    if (!isAllowedBrowserOrigin(request)) return NextResponse.json({ ok: false, message: '許可されていない送信元です。' }, { status: 403 });
     await requireAdmin();
     const declaredSize = Number(request.headers.get('content-length') || 0);
     if (declaredSize > MAX_GCS_UPLOAD_BYTES) return NextResponse.json({ ok: false, message: '画像は8MB以下にしてください。' }, { status: 413 });

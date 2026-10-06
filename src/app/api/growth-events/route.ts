@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { GROWTH_EVENT_TYPES } from '@/lib/growth-events';
 import { currentUserId } from '@/server/auth';
+import { checkRateLimit, isAllowedBrowserOrigin, readJsonWithLimit } from '@/lib/security';
 
 const schema = z.object({
   eventType: z.enum(GROWTH_EVENT_TYPES),
@@ -40,13 +41,16 @@ function toRow(sessionKey: string, userId: string | null, parsed: z.infer<typeof
 // クライアント側でカードの数だけfetchを乱発しないよう、必ずこの形を使うこと。
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    if (!isAllowedBrowserOrigin(request)) return NextResponse.json({ ok: false }, { status: 403 });
+    const rateLimit = checkRateLimit(request, 'growth-events', 120);
+    if (!rateLimit.allowed) return NextResponse.json({ ok: false }, { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfter) } });
+    const body = await readJsonWithLimit(request);
     const cookie = request.headers.get('cookie') ?? '';
     const existing = cookie.match(/(?:^|; )ore_growth_session=([^;]+)/)?.[1];
     const sessionKey = existing ? decodeURIComponent(existing) : randomUUID();
     const userId = await currentUserId();
 
-    if (Array.isArray(body?.events)) {
+    if (body !== null && typeof body === 'object' && Array.isArray((body as { events?: unknown }).events)) {
       const { events } = batchSchema.parse(body);
       await prisma.growthEvent.createMany({ data: events.map(e => toRow(sessionKey, userId, e)) });
     } else {
@@ -57,7 +61,8 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ ok: true });
     response.cookies.set('ore_growth_session', sessionKey, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 90, path: '/' });
     return response;
-  } catch {
+  } catch (error) {
+    if (error instanceof Response) return NextResponse.json({ ok: false }, { status: error.status });
     return NextResponse.json({ ok: false }, { status: 400 });
   }
 }
