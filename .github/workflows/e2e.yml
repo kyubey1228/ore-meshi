@@ -26,7 +26,7 @@ jobs:
       E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ore_meshi_e2e
       AUTH_SECRET: ore-meshi-ci-secret-at-least-32-characters
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
