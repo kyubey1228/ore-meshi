@@ -1,4 +1,5 @@
 import { centerCrop } from '@/lib/image-crop';
+import { apiErrorMessage, readJsonResponse } from '@/lib/json-response';
 
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
@@ -29,15 +30,15 @@ async function optimizeImage(file: File, purpose: 'cover' | 'og' | 'body') {
 export async function uploadArticleImage(file: File, purpose: 'cover' | 'og' | 'body') {
   const optimized = await optimizeImage(file, purpose);
   const signed = await fetch('/api/admin/media/upload-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contentType: 'image/webp', size: optimized.blob.size, purpose }) });
-  const data = await signed.json() as { ok: boolean; uploadUrl?: string; publicUrl?: string; message?: string };
-  if (!signed.ok || !data.uploadUrl || !data.publicUrl) throw new Error(data.message || 'アップロードURLを取得できませんでした。');
+  const data = await readJsonResponse<{ ok: boolean; uploadUrl?: string; publicUrl?: string; message?: string }>(signed, 'アップロードURLを取得できませんでした。');
+  if (!signed.ok || !data.uploadUrl || !data.publicUrl) throw new Error(apiErrorMessage(data, 'アップロードURLを取得できませんでした。'));
   try {
     const result = await fetch(data.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: optimized.blob });
     if (result.ok) return { url: data.publicUrl, width: optimized.width, height: optimized.height };
   } catch { /* CORSやネットワーク制限時は同一オリジン経由へ切り替える */ }
 
   const fallback = await fetch(`/api/admin/media/upload?purpose=${encodeURIComponent(purpose)}`, { method: 'POST', headers: { 'Content-Type': 'image/webp' }, body: optimized.blob });
-  const fallbackData = await fallback.json() as { ok: boolean; publicUrl?: string; message?: string };
-  if (!fallback.ok || !fallbackData.publicUrl) throw new Error(fallbackData.message || '画像をアップロードできませんでした。');
+  const fallbackData = await readJsonResponse<{ ok: boolean; publicUrl?: string; message?: string }>(fallback, '画像をアップロードできませんでした。');
+  if (!fallback.ok || !fallbackData.publicUrl) throw new Error(apiErrorMessage(fallbackData, '画像をアップロードできませんでした。'));
   return { url: fallbackData.publicUrl, width: optimized.width, height: optimized.height };
 }
