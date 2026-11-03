@@ -14,10 +14,12 @@ SupabaseはDatabaseとしてのみ使用し、認証にはSupabase Authを使い
 
 ## ローカル起動
 
-Node.js 20以降を用意し、依存関係と環境変数を設定します。
+Node.js 24.22.2（LTS）を使用します。バージョンは `.nvmrc` で管理し、CIも同じ設定を参照します。2026年10月のセキュリティ修正を含むバージョンです。
 
 ```bash
-npm install
+nvm install
+nvm use
+npm install --legacy-peer-deps
 cp .env.example .env.local
 npm run db:generate
 npm run db:migrate
@@ -140,6 +142,8 @@ Client IDを `AUTH_TWITTER_ID`、Client Secretを `AUTH_TWITTER_SECRET` に設�
 ## ロリポップ！デプロイなう
 
 このリポジトリをGitHubへ配置し、ロリポップ！デプロイなうでリポジトリと本番ブランチを選択します。Build commandは `npm run build`、Start commandは `npm run start` を指定してください。[next.config.ts](./next.config.ts) はNode.jsサーバー向けに必須の `output: "standalone"` を設定済みです。
+
+ビルド環境と実行環境のNode.jsを24.22.2以降の24系に設定してから再デプロイしてください。`.nvmrc` や `package.json` の `engines` がホスティング側で反映されるか確認し、デプロイログまたは実行環境の `node --version` で実際のバージョンを確認します。リポジトリの変更だけでは、稼働中のNode.jsは更新されません。
 
 管理画面で `DATABASE_URL`、`DIRECT_URL`、`AUTH_SECRET`、`AUTH_TWITTER_ID`、`AUTH_TWITTER_SECRET`、`NEXT_PUBLIC_APP_URL`、`NEXTAUTH_URL` を本番値として登録し、デプロイ前またはリリース処理で `npm run db:deploy` を一度実行します。X Developer Portalの本番Callback URIも忘れずに追加してください。
 
